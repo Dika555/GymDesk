@@ -7,21 +7,40 @@ import VisitsReport from "@/components/reports/VisitsReport";
 import TrainersReport from "@/components/reports/TrainersReport";
 import TransactionReport from "@/components/reports/TransactionReport";
 import ProductReport from "@/components/reports/ProductReport";
+import {
+  CalendarDays,
+  Check,
+  ClipboardList,
+  FileBarChart,
+  FileSpreadsheet,
+  ListChecks,
+  SquareMinus,
+  Users,
+  CreditCard,
+  CalendarCheck,
+  Dumbbell,
+  Receipt,
+  Package,
+  ChartNoAxesCombined,
+} from "lucide-react";
+
 
 import * as XLSX from "xlsx";
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 
+
 const reportOptions = [
-  { id: "summary", label: "Ringkasan" },
-  { id: "members", label: "Data Member" },
-  { id: "membership", label: "Data Membership" },
-  { id: "visits", label: "Data Kunjungan" },
-  { id: "trainers", label: "Data Trainer" },
-  { id: "transactions", label: "Data Transaksi" },
-  { id: "products", label: "Data Produk & Stok" },
+  { id: "summary", label: "Ringkasan", icon: ChartNoAxesCombined },
+  { id: "members", label: "Data Member", icon: Users },
+  { id: "membership", label: "Membership", icon: CreditCard },
+  { id: "visits", label: "Kunjungan", icon: CalendarCheck },
+  { id: "trainers", label: "Trainer", icon: Dumbbell },
+  { id: "transactions", label: "Transaksi", icon: Receipt },
+  { id: "products", label: "Produk & Stok", icon: Package },
 ];
+
 
 export default function ReportsPage() {
   const [selectedReports, setSelectedReports] = useState<string[]>(
@@ -41,6 +60,7 @@ export default function ReportsPage() {
     totalRevenue: 0,
   });
 
+
   const [memberReport, setMemberReport] = useState<
     {
       id: string;
@@ -49,10 +69,11 @@ export default function ReportsPage() {
       email: string | null;
       gender: string | null;
       address: string | null;
-      status: string | null;
+      membership: string | null;
       created_at: string;
     }[]
   >([]);
+
 
   const [visitReport, setVisitReport] = useState<
     {
@@ -105,9 +126,11 @@ export default function ReportsPage() {
       name: string;
       category: string;
       price: number;
+      openingStock: number | null;
       stockIn: number;
       stockOut: number;
-      currentStock: number;
+      endingStock: number | null;
+      historyComplete: boolean;
     }[]
   >([]);
 
@@ -147,7 +170,7 @@ export default function ReportsPage() {
       .lte("created_at", `${endDate}T23:59:59`);
 
     if (memberError) {
-      console.error(memberError);
+      console.error("Gagal mengambil data member.");
       setMessage("Gagal mengambil data member.");
       return;
     }
@@ -160,7 +183,7 @@ export default function ReportsPage() {
       .lte("created_at", `${endDate}T23:59:59`);
 
     if (membershipError) {
-      console.error(membershipError);
+      console.error("Gagal mengambil data membership.");
       setMessage("Gagal mengambil data membership.");
       return;
     }
@@ -173,7 +196,7 @@ export default function ReportsPage() {
       .lte("visit_date", endDate);
 
     if (visitError) {
-      console.error(visitError);
+      console.error("Gagal mengambil data kunjungan.");
       setMessage("Gagal mengambil data kunjungan.");
       return;
     }
@@ -187,7 +210,7 @@ export default function ReportsPage() {
       .eq("status", "completed");
 
     if (transactionError) {
-      console.error(transactionError);
+      console.error("Gagal mengambil data transaksi.");
       setMessage("Gagal mengambil data transaksi.");
       return;
     }
@@ -218,26 +241,32 @@ export default function ReportsPage() {
       return;
     }
 
+
     const { data, error } = await supabase
       .from("members")
       .select(`
-      id,
-      name,
-      phone,
-      email,
-      gender,
-      address,
-      status,
-      created_at
-    `)
+        id,
+        name,
+        phone,
+        email,
+        gender,
+        address,
+        membership,
+        created_at
+      `)
       .eq("branch_id", branchId)
       .gte("created_at", `${startDate}T00:00:00`)
       .lte("created_at", `${endDate}T23:59:59`)
       .order("created_at", { ascending: false });
 
+
     if (error) {
-      console.error(error);
-      setMessage("Gagal mengambil data member.");
+      console.error("Gagal memuat laporan member.");
+
+      setMessage(
+        `Gagal mengambil data member: ${error.message || "Penyebab tidak diketahui."}`
+      );
+
       return;
     }
 
@@ -328,7 +357,7 @@ export default function ReportsPage() {
         Email: member.email ?? "-",
         Gender: member.gender ?? "-",
         Alamat: member.address ?? "-",
-        Status: member.status ?? "-",
+        Status: member.membership ?? "-",
         "Tanggal Daftar": member.created_at,
       }));
 
@@ -428,25 +457,23 @@ export default function ReportsPage() {
     }
 
     if (selectedReports.includes("products")) {
-      const productData = productReport.map(
-        (product, index) => ({
-          No: index + 1,
-          Produk: product.name,
-          Kategori: product.category || "-",
-          Harga: product.price,
-          "Stok Masuk": product.stockIn,
-          "Stok Keluar": product.stockOut,
-          "Stok Akhir": product.currentStock,
-        })
-      );
+      const productData = productReport.map((product, index) => ({
+        No: index + 1,
+        Produk: product.name,
+        Kategori: product.category || "-",
+        Harga: product.price,
+        "Stok Awal": product.openingStock ?? "Riwayat belum lengkap",
+        "Stok Masuk": product.stockIn,
+        "Stok Keluar": product.stockOut,
+        "Stok Akhir": product.endingStock ?? "Riwayat belum lengkap",
+      }));
 
-      const worksheet =
-        XLSX.utils.json_to_sheet(productData);
+      const worksheet = XLSX.utils.json_to_sheet(productData);
 
       XLSX.utils.book_append_sheet(
         workbook,
         worksheet,
-        "Data Produk & Stok"
+        "Produk & Stok"
       );
     }
 
@@ -489,7 +516,7 @@ export default function ReportsPage() {
       .order("start_date", { ascending: false });
 
     if (membershipError) {
-      console.error(membershipError);
+      console.error("Gagal mengambil data membership.");
       setMessage("Gagal mengambil data membership.");
       return;
     }
@@ -513,7 +540,7 @@ export default function ReportsPage() {
       .in("id", memberIds);
 
     if (memberError) {
-      console.error(memberError);
+      console.error("Gagal mengambil data member.");
       setMessage("Gagal mengambil data member membership.");
       return;
     }
@@ -525,7 +552,7 @@ export default function ReportsPage() {
       .in("id", planIds);
 
     if (planError) {
-      console.error(planError);
+      console.error("Gagal mengambil paket membership.");
       setMessage("Gagal mengambil data paket membership.");
       return;
     }
@@ -587,7 +614,7 @@ export default function ReportsPage() {
       .order("visit_date", { ascending: false });
 
     if (visitError) {
-      console.error(visitError);
+      console.error("Gagal mengambil data kunjungan.");
       setMessage("Gagal mengambil data kunjungan.");
       return;
     }
@@ -610,7 +637,7 @@ export default function ReportsPage() {
         .in("id", memberIds);
 
       if (memberError) {
-        console.error(memberError);
+        console.error("Gagal mengambil data member.");
         setMessage("Gagal mengambil data member kunjungan.");
         return;
       }
@@ -654,7 +681,7 @@ export default function ReportsPage() {
       .order("name", { ascending: true });
 
     if (trainerError) {
-      console.error(trainerError);
+      console.error("Gagal mengambil data trainer.");
       setMessage("Gagal mengambil data trainer.");
       return;
     }
@@ -674,7 +701,7 @@ export default function ReportsPage() {
         .in("trainer_id", trainerIds);
 
     if (trainerMemberError) {
-      console.error(trainerMemberError);
+      console.error("Gagal mengambil data member trainer.");
       setMessage("Gagal mengambil data member trainer.");
       return;
     }
@@ -689,7 +716,7 @@ export default function ReportsPage() {
       .eq("status", "completed");
 
     if (sessionError) {
-      console.error(sessionError);
+      console.error("Gagal mengambil data sesi trainer.");
       setMessage("Gagal mengambil data sesi trainer.");
       return;
     }
@@ -707,7 +734,7 @@ export default function ReportsPage() {
         .lte("purchase_date", endDate);
 
     if (packageMemberError) {
-      console.error(packageMemberError);
+      console.error("Gagal mengambil data paket trainer.");
       setMessage("Gagal mengambil data paket trainer.");
       return;
     }
@@ -726,7 +753,7 @@ export default function ReportsPage() {
         .eq("status", "completed");
 
     if (singleSessionError) {
-      console.error(singleSessionError);
+      console.error("Gagal mengambil data sesi satuan.");
       setMessage("Gagal mengambil transaksi sesi trainer.");
       return;
     }
@@ -760,7 +787,7 @@ export default function ReportsPage() {
           .eq("status", "completed");
 
       if (transactionError) {
-        console.error(transactionError);
+        console.error("Gagal mengambil data transaksi.");
         setMessage("Gagal mengambil transaksi trainer.");
         return;
       }
@@ -878,7 +905,7 @@ export default function ReportsPage() {
       });
 
     if (error) {
-      console.error(error);
+      console.error("Gagal mengambil data transaksi.");
       setMessage("Gagal mengambil data transaksi.");
       return;
     }
@@ -904,7 +931,6 @@ export default function ReportsPage() {
 
   async function loadProductReport() {
     const supabase = createClient();
-
     const branchId = getActiveBranchId();
 
     if (!branchId) {
@@ -912,6 +938,13 @@ export default function ReportsPage() {
       return;
     }
 
+    // Pastikan tanggal laporan sudah dipilih.
+    if (!startDate || !endDate) {
+      setMessage("Silakan pilih tanggal mulai dan tanggal akhir.");
+      return;
+    }
+
+    // 1. Ambil semua produk dari cabang aktif.
     const { data: products, error: productError } = await supabase
       .from("products")
       .select("id, name, category, price, stock")
@@ -919,184 +952,365 @@ export default function ReportsPage() {
       .order("name", { ascending: true });
 
     if (productError) {
-      console.error(productError);
+      console.error("Gagal mengambil data produk.");
       setMessage("Gagal mengambil data produk.");
       return;
     }
 
-    const productIds = (products ?? []).map(
-      (product) => product.id
-    );
+    const productIds = (products ?? []).map((product) => product.id);
 
-    let stockMovements: {
-      product_id: string;
-      type: string;
-      quantity: number;
-    }[] = [];
-
-    if (productIds.length > 0) {
-      const { data, error } = await supabase
-        .from("stock_movements")
-        .select("product_id, type, quantity")
-        .eq("branch_id", branchId)
-        .in("product_id", productIds)
-        .gte("created_at", `${startDate}T00:00:00`)
-        .lte("created_at", `${endDate}T23:59:59`);
-
-      if (error) {
-        console.error(error);
-        setMessage("Gagal mengambil data pergerakan stok.");
-        return;
-      }
-
-      stockMovements = data ?? [];
+    if (productIds.length === 0) {
+      setProductReport([]);
+      setMessage("Tidak ada produk pada cabang ini.");
+      return;
     }
 
-    const stockInMap = new Map<string, number>();
-    const stockOutMap = new Map<string, number>();
+    // 2. Ambil riwayat pergerakan stok, termasuk sebelum periode.
+    const { data: movements, error: movementError } = await supabase
+      .from("stock_movements")
+      .select("product_id, type, quantity, description, created_at")
+      .eq("branch_id", branchId)
+      .in("product_id", productIds)
+      .order("created_at", { ascending: true });
 
-    for (const movement of stockMovements) {
-      const quantity = Number(movement.quantity ?? 0);
-
-      if (movement.type === "in") {
-        stockInMap.set(
-          movement.product_id,
-          (stockInMap.get(movement.product_id) ?? 0) + quantity
-        );
-      }
-
-      if (movement.type === "out") {
-        stockOutMap.set(
-          movement.product_id,
-          (stockOutMap.get(movement.product_id) ?? 0) + quantity
-        );
-      }
+    if (movementError) {
+      console.error("Gagal mengambil data pergerakan stok.");
+      setMessage("Gagal mengambil data pergerakan stok.");
+      return;
     }
 
-    setProductReport(
-      (products ?? []).map((product) => ({
+    // Gunakan batas waktu WIB (UTC+7).
+    // Tanggal akhir menggunakan batas eksklusif hari berikutnya.
+    const startTime = new Date(
+      `${startDate}T00:00:00+07:00`
+    ).getTime();
+
+    const endExclusiveTime =
+      new Date(`${endDate}T00:00:00+07:00`).getTime() +
+      24 * 60 * 60 * 1000;
+
+    // 3. Hitung laporan masing-masing produk.
+    const report = (products ?? []).map((product) => {
+      const productMovements = (movements ?? []).filter(
+        (movement) => movement.product_id === product.id
+      );
+
+      // Catatan stok awal yang dibuat oleh form tambah produk.
+      const initialMovement = productMovements.find(
+        (movement) =>
+          movement.type === "in" &&
+          movement.description === "Stok awal produk"
+      );
+
+      let stockIn = 0;
+      let stockOut = 0;
+
+      // Hitung pergerakan stok yang terjadi di dalam periode.
+      for (const movement of productMovements) {
+        const movementTime = new Date(movement.created_at).getTime();
+
+        if (
+          movementTime < startTime ||
+          movementTime >= endExclusiveTime
+        ) {
+          continue;
+        }
+
+        const quantity = Number(movement.quantity ?? 0);
+
+        if (movement.type === "in") {
+          stockIn += quantity;
+        } else if (movement.type === "out") {
+          stockOut += quantity;
+        }
+      }
+
+      // Produk lama tanpa catatan stok awal tidak dapat
+      // dipastikan stok historisnya hanya dari riwayat yang tersedia.
+      if (!initialMovement) {
+        return {
+          id: product.id,
+          name: product.name,
+          category: product.category ?? "",
+          price: Number(product.price ?? 0),
+          openingStock: null,
+          stockIn,
+          stockOut,
+          endingStock: null,
+          historyComplete: false,
+        };
+      }
+
+      const initialTime = new Date(
+        initialMovement.created_at
+      ).getTime();
+
+      let openingStock = Number(initialMovement.quantity ?? 0);
+      let hasEarlierAdjustment = false;
+      let hasPeriodAdjustment = false;
+
+      // Hitung stok sebelum tanggal mulai.
+      for (const movement of productMovements) {
+        const movementTime = new Date(movement.created_at).getTime();
+
+        // Jangan hitung catatan yang mendahului catatan stok awal.
+        if (movementTime <= initialTime || movementTime >= startTime) {
+          continue;
+        }
+
+        const quantity = Number(movement.quantity ?? 0);
+
+        if (movement.type === "in") {
+          openingStock += quantity;
+        } else if (movement.type === "out") {
+          openingStock -= quantity;
+        } else if (movement.type === "adjustment") {
+          hasEarlierAdjustment = true;
+        }
+      }
+
+      // Periksa apakah ada adjustment di periode laporan.
+      for (const movement of productMovements) {
+        const movementTime = new Date(movement.created_at).getTime();
+
+        if (
+          movementTime >= startTime &&
+          movementTime < endExclusiveTime &&
+          movement.type === "adjustment"
+        ) {
+          hasPeriodAdjustment = true;
+        }
+      }
+
+      // Adjustment belum dihitung karena perlu memastikan
+      // apakah quantity merupakan nilai perubahan atau stok hasil penyesuaian.
+      const validOpeningStock =
+        !hasEarlierAdjustment &&
+        Number.isFinite(openingStock);
+
+      const endingStock =
+        validOpeningStock && !hasPeriodAdjustment
+          ? openingStock + stockIn - stockOut
+          : null;
+
+      return {
         id: product.id,
         name: product.name,
         category: product.category ?? "",
         price: Number(product.price ?? 0),
-        stockIn: stockInMap.get(product.id) ?? 0,
-        stockOut: stockOutMap.get(product.id) ?? 0,
-        currentStock: Number(product.stock ?? 0),
-      }))
-    );
+        openingStock: validOpeningStock ? openingStock : null,
+        stockIn,
+        stockOut,
+        endingStock,
+        historyComplete:
+          validOpeningStock &&
+          !hasPeriodAdjustment,
+      };
+    });
+
+    // 4. Kirim hasil ke komponen laporan.
+    setProductReport(report);
+    setMessage("Laporan berhasil diperbarui.");
   }
 
   return (
-    <main className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-zinc-900">
-          Laporan
-        </h1>
+    <main className="min-w-0 p-4 sm:p-6">
+      {/* HEADER */}
+      <div className="mb-6 flex items-start gap-3">
+        <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+          <FileBarChart size={26} />
+        </div>
 
-        <p className="mt-1 text-sm text-zinc-500">
-          Tampilkan dan export laporan berdasarkan periode yang dipilih.
-        </p>
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+            Laporan
+          </h1>
+
+          <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+            Kelola, tampilkan, dan export laporan GymDesk berdasarkan periode.
+          </p>
+        </div>
       </div>
 
-      {/* Filter Periode */}
-      <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
-        <h2 className="mb-4 text-base font-semibold text-zinc-900">
-          Periode Laporan
-        </h2>
+      {/* FILTER PERIODE */}
+      <section className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex items-start gap-3 border-b border-zinc-200 pb-5">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+            <CalendarDays size={20} />
+          </div>
 
-        <div className="flex flex-col gap-4 sm:flex-row">
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Dari
+            <h2 className="text-lg font-bold text-zinc-900">
+              Periode Laporan
+            </h2>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              Tentukan rentang tanggal data yang ingin dianalisis.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div>
+            <label
+              htmlFor="report-start-date"
+              className="mb-2 block text-sm font-semibold text-zinc-700"
+            >
+              Tanggal Mulai
             </label>
 
             <input
+              id="report-start-date"
               type="date"
               value={startDate}
               onChange={(event) => setStartDate(event.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Sampai
+            <label
+              htmlFor="report-end-date"
+              className="mb-2 block text-sm font-semibold text-zinc-700"
+            >
+              Tanggal Akhir
             </label>
 
             <input
+              id="report-end-date"
               type="date"
               value={endDate}
               onChange={(event) => setEndDate(event.target.value)}
-              className="rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+              className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
             />
           </div>
         </div>
       </section>
 
-      {/* Pilihan Laporan */}
-      <section className="mb-6 rounded-xl border border-zinc-200 bg-white p-5">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-base font-semibold text-zinc-900">
-              Pilih Laporan
-            </h2>
+      {/* PILIHAN LAPORAN */}
+      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-4 border-b border-zinc-200 pb-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-zinc-100 text-zinc-700">
+              <ClipboardList size={22} />
+            </div>
 
-            <p className="mt-1 text-sm text-zinc-500">
-              Pilih data yang ingin ditampilkan atau diexport.
-            </p>
+            <div>
+              <h2 className="text-lg font-bold text-zinc-900">
+                Pilih Laporan
+              </h2>
+
+              <p className="mt-1 text-sm text-zinc-500">
+                Pilih satu atau beberapa jenis laporan yang ingin ditampilkan.
+              </p>
+            </div>
           </div>
 
           <button
             type="button"
             onClick={toggleAllReports}
-            className="text-sm font-medium text-orange-600 hover:text-orange-700"
+            className="inline-flex items-center justify-center gap-2 self-start rounded-xl border border-orange-200 bg-white px-4 py-2.5 text-sm font-semibold text-orange-600 transition-colors hover:bg-orange-50 sm:self-auto"
           >
+            {selectedReports.length === reportOptions.length ? (
+              <SquareMinus size={17} />
+            ) : (
+              <ListChecks size={17} />
+            )}
+
             {selectedReports.length === reportOptions.length
               ? "Batalkan Semua"
               : "Pilih Semua"}
           </button>
         </div>
 
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {reportOptions.map((report) => (
-            <label
-              key={report.id}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 p-3 hover:bg-zinc-50"
-            >
-              <input
-                type="checkbox"
-                checked={selectedReports.includes(report.id)}
-                onChange={() => toggleReport(report.id)}
-                className="h-4 w-4 accent-orange-500"
-              />
+        <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {reportOptions.map((report) => {
+            const checked = selectedReports.includes(report.id);
 
-              <span className="text-sm font-medium text-zinc-700">
-                {report.label}
-              </span>
-            </label>
-          ))}
+
+            return (
+              <label
+                key={report.id}
+                className={`flex cursor-pointer items-center gap-3 rounded-xl border p-4 transition-all ${checked
+                  ? "border-orange-400 bg-orange-50 shadow-sm"
+                  : "border-zinc-300 bg-white hover:border-zinc-400 hover:bg-zinc-50"
+                  }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => toggleReport(report.id)}
+                  className="h-4 w-4 shrink-0 accent-orange-500"
+                />
+
+                <div
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${checked
+                    ? "bg-orange-500 text-white"
+                    : "bg-zinc-100 text-zinc-600"
+                    }`}
+                >
+                  <report.icon size={20} />
+                </div>
+
+                <span
+                  className={`text-sm font-semibold ${checked ? "text-zinc-900" : "text-zinc-700"
+                    }`}
+                >
+                  {report.label}
+                </span>
+
+                {checked && (
+                  <Check
+                    size={18}
+                    className="ml-auto shrink-0 text-orange-600"
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+
+        <div className="mt-4 text-sm text-zinc-500">
+          {selectedReports.length} dari {reportOptions.length} laporan dipilih
         </div>
       </section>
 
-      {/* Tombol Aksi */}
-      <div className="flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={handleShowReport}
-          className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white hover:bg-orange-600"
-        >
-          Tampilkan Laporan
-        </button>
+      {/* TOMBOL AKSI */}
+      <section className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-base font-bold text-zinc-900">
+              Hasil Laporan
+            </h2>
 
-        <button
-          type="button"
-          onClick={handleExportXlsx}
-          className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 hover:bg-zinc-50"
-        >
-          Export XLSX
-        </button>
-      </div>
+            <p className="mt-1 text-sm text-zinc-500">
+              Tampilkan laporan atau simpan data yang dipilih ke Excel.
+            </p>
+          </div>
 
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <button
+              type="button"
+              onClick={handleShowReport}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+            >
+              <FileBarChart size={17} />
+              Tampilkan Laporan
+            </button>
+
+            <button
+              type="button"
+              onClick={handleExportXlsx}
+              className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-300 focus:ring-offset-2"
+            >
+              <FileSpreadsheet size={17} />
+              Export XLSX
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* HASIL LAPORAN */}
       {selectedReports.includes("summary") && showReport && (
         <SummaryReport
           newMembers={summary.newMembers}
@@ -1131,9 +1345,20 @@ export default function ReportsPage() {
         <ProductReport products={productReport} />
       )}
 
-      {/* Pesan */}
+      {/* PESAN */}
       {message && (
-        <div className="mt-4 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-600">
+        <div
+          role="status"
+          className={`mt-4 rounded-xl border px-4 py-3 text-sm ${message.includes("Gagal") ||
+            message.includes("tidak boleh") ||
+            message.includes("Silakan") ||
+            message.includes("Pilih minimal") ||
+            message.includes("belum dipilih") ||
+            message.includes("Tidak ada")
+            ? "border-red-200 bg-red-50 text-red-700"
+            : "border-green-200 bg-green-50 text-green-700"
+            }`}
+        >
           {message}
         </div>
       )}

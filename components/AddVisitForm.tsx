@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import Select from "react-select";
+import FeedbackModal from "@/components/FeedbackModal";
 
 type Member = {
   id: string;
@@ -29,6 +31,28 @@ export default function AddVisitForm({ onSuccess }: Props) {
   const [paymentMethod, setPaymentMethod] = useState("");
   const [saving, setSaving] = useState(false);
 
+  type FeedbackType = "success" | "error" | "warning" | "info";
+
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
   useEffect(() => {
     async function getMembers() {
       const supabase = createClient();
@@ -47,7 +71,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
         .order("name");
 
       if (error) {
-        console.error(error);
+        console.error("Gagal memuat data kunjungan.");
         return;
       }
 
@@ -77,7 +101,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
       .limit(1);
 
     if (error) {
-      console.error(error);
+      console.error("Gagal mengambil data member.");
       setMemberHasActiveMembership(false);
     } else {
       setMemberHasActiveMembership((data ?? []).length > 0);
@@ -93,157 +117,244 @@ export default function AddVisitForm({ onSuccess }: Props) {
     setPaymentMethod("");
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!visitDate) {
-      alert("Pilih tanggal kunjungan terlebih dahulu.");
+      showFeedback(
+        "Tanggal Belum Dipilih",
+        "Pilih tanggal kunjungan terlebih dahulu.",
+        "warning"
+      );
       return;
     }
 
-    if (
-      visitType === "member" &&
-      !memberHasActiveMembership
-    ) {
-      alert("Member tidak memiliki membership aktif.");
+    if (visitType === "member" && !memberId) {
+      showFeedback(
+        "Member Belum Dipilih",
+        "Pilih member yang akan dicatat kunjungannya.",
+        "warning"
+      );
+      return;
+    }
+
+    if (visitType === "member" && !memberHasActiveMembership) {
+      showFeedback(
+        "Membership Tidak Aktif",
+        "Member tidak memiliki membership aktif pada tanggal kunjungan tersebut.",
+        "warning"
+      );
       return;
     }
 
     if (visitType === "non-member" && !visitorName.trim()) {
-      alert("Masukkan nama pengunjung.");
+      showFeedback(
+        "Nama Belum Diisi",
+        "Masukkan nama pengunjung.",
+        "warning"
+      );
       return;
     }
 
     if (visitType === "non-member" && !paymentMethod) {
-      alert("Pilih metode pembayaran.");
+      showFeedback(
+        "Pembayaran Belum Dipilih",
+        "Pilih metode pembayaran terlebih dahulu.",
+        "warning"
+      );
       return;
     }
 
     setSaving(true);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
+      const branchId = await getActiveBranchId();
 
-    const branchId = getActiveBranchId();
+      if (!branchId) {
+        showFeedback(
+          "Cabang Belum Dipilih",
+          "Cabang aktif belum ditemukan. Periksa pilihan cabang terlebih dahulu.",
+          "error"
+        );
+        return;
+      }
 
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      setSaving(false);
-      return;
-    }
-
-    const { error } = await supabase.rpc(
-      "create_visit",
-      {
+      const { error } = await supabase.rpc("create_visit", {
         p_branch_id: branchId,
-        p_member_id:
-          visitType === "member" ? memberId : null,
+        p_member_id: visitType === "member" ? memberId : null,
         p_visitor_name:
-          visitType === "member"
-            ? ""
-            : visitorName.trim(),
+          visitType === "member" ? "" : visitorName.trim(),
         p_visit_date: visitDate,
         p_payment_method:
-          visitType === "member"
-            ? null
-            : paymentMethod,
+          visitType === "member" ? null : paymentMethod,
+      });
+
+      if (error) {
+        console.error("Gagal mencatat kunjungan:", error);
+
+        showFeedback(
+          "Gagal Mencatat Kunjungan",
+          "Kunjungan gagal dicatat. Silakan periksa data dan coba kembali.",
+          "error"
+        );
+        return;
       }
-    );
 
-    setSaving(false);
+      setMemberId("");
+      setVisitorName("");
+      setVisitDate("");
+      setPaymentMethod("");
+      setMemberHasActiveMembership(false);
 
-    if (error) {
-      console.error(error);
-      alert(error.message);
-      return;
+      onSuccess();
+    } catch (error) {
+      console.error("Terjadi kesalahan:", error);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Terjadi kesalahan saat mencatat kunjungan. Silakan coba kembali.",
+        "error"
+      );
+    } finally {
+      setSaving(false);
     }
-
-    alert("Kunjungan berhasil dicatat.");
-
-    setMemberId("");
-    setVisitorName("");
-    setVisitDate("");
-    setPaymentMethod("");
-
-    onSuccess();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-5">
-      <div>
-        <label className="mb-2 block text-sm font-medium">
-          Tipe Pengunjung
-        </label>
-
-        <div className="grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => handleTypeChange("member")}
-            className={`rounded-lg border px-4 py-2 ${visitType === "member"
-              ? "border-orange-500 bg-orange-50 text-orange-600"
-              : "border-gray-300"
-              }`}
-          >
-            Member
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleTypeChange("non-member")}
-            className={`rounded-lg border px-4 py-2 ${visitType === "non-member"
-              ? "border-orange-500 bg-orange-50 text-orange-600"
-              : "border-gray-300"
-              }`}
-          >
-            Non-member
-          </button>
-        </div>
-      </div>
-
-      {visitType === "member" ? (
+    <>
+      <form
+        id="add-visit-form"
+        onSubmit={handleSubmit}
+        className="space-y-5"
+      >
         <div>
           <label className="mb-2 block text-sm font-medium">
-            Member
+            Tipe Pengunjung
           </label>
 
-          <select
-            value={memberId}
-            onChange={(e) => {
-              const id = e.target.value;
-              setMemberId(id);
-              checkMembership(id, visitDate);
-            }}
-            className="w-full rounded-lg border px-3 py-2"
-          >
-            <option value="">Pilih member</option>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => handleTypeChange("member")}
+              className={`rounded-lg border px-4 py-2 ${visitType === "member"
+                ? "border-orange-500 bg-orange-50 text-orange-600"
+                : "border-gray-300"
+                }`}
+            >
+              Member
+            </button>
 
-            {members.map((member) => (
-              <option key={member.id} value={member.id}>
-                {member.name} — {member.phone}
-              </option>
-            ))}
-          </select>
-
-          <p className="mt-2 text-sm text-gray-500">
-            Member dengan membership aktif tidak dikenakan biaya
-            kunjungan.
-          </p>
+            <button
+              type="button"
+              onClick={() => handleTypeChange("non-member")}
+              className={`rounded-lg border px-4 py-2 ${visitType === "non-member"
+                ? "border-orange-500 bg-orange-50 text-orange-600"
+                : "border-gray-300"
+                }`}
+            >
+              Non-member
+            </button>
+          </div>
         </div>
-      ) : (
-        <>
+
+        {/* Member */}
+        {visitType === "member" ? (
           <div>
             <label className="mb-2 block text-sm font-medium">
-              Nama Pengunjung
+              Member
             </label>
 
-            <input
-              type="text"
-              value={visitorName}
-              onChange={(e) => setVisitorName(e.target.value)}
-              placeholder="Masukkan nama pengunjung"
-              className="w-full rounded-lg border px-3 py-2"
+            <Select
+              options={members.map((m) => ({
+                value: m.id,
+                label: `${m.name} — ${m.phone || "-"}`,
+              }))}
+              value={members
+                .map((m) => ({
+                  value: m.id,
+                  label: `${m.name} — ${m.phone || "-"}`,
+                }))
+                .find((m) => m.value === memberId) ?? null}
+              onChange={(option) => {
+                const id = option?.value ?? "";
+                setMemberId(id);
+                checkMembership(id, visitDate);
+              }}
+              placeholder="Cari nama atau nomor telepon..."
+              isSearchable
+              styles={{
+                control: (base) => ({
+                  ...base,
+                  minHeight: "42px",
+                  borderRadius: "8px",
+                  borderColor: "#d4d4d8",
+                  boxShadow: "none",
+                }),
+              }}
             />
-          </div>
 
+            <p className="mt-2 text-sm text-gray-500">
+              Member dengan membership aktif tidak dikenakan biaya kunjungan.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Nama Pengunjung
+              </label>
+
+              <input
+                type="text"
+                value={visitorName}
+                onChange={(e) => setVisitorName(e.target.value)}
+                placeholder="Masukkan nama pengunjung"
+                className="w-full rounded-lg border px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Biaya Kunjungan
+              </label>
+
+              <input
+                type="text"
+                value={
+                  checkingMembership
+                    ? "Memeriksa..."
+                    : memberHasActiveMembership
+                      ? "Rp 0"
+                      : "Tidak memiliki membership aktif"
+                }
+                readOnly
+                className="w-full rounded-lg border bg-gray-100 px-3 py-2"
+              />
+            </div>
+
+            <div>
+              <label className="mb-2 block text-sm font-medium">
+                Metode Pembayaran
+              </label>
+
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+              >
+                <option value="">
+                  Pilih metode pembayaran
+                </option>
+                <option value="cash">Cash</option>
+                <option value="qris">QRIS</option>
+                <option value="transfer">Transfer</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {visitType === "member" && (
           <div>
             <label className="mb-2 block text-sm font-medium">
               Biaya Kunjungan
@@ -254,87 +365,50 @@ export default function AddVisitForm({ onSuccess }: Props) {
               value={
                 checkingMembership
                   ? "Memeriksa..."
-                  : memberHasActiveMembership
-                    ? "Rp 0"
-                    : "Tidak memiliki membership aktif"
+                  : !memberId
+                    ? "Pilih member"
+                    : !visitDate
+                      ? "Pilih tanggal kunjungan"
+                      : memberHasActiveMembership
+                        ? "Rp 0"
+                        : "Tidak memiliki membership aktif"
               }
               readOnly
               className="w-full rounded-lg border bg-gray-100 px-3 py-2"
             />
           </div>
+        )}
 
-          <div>
-            <label className="mb-2 block text-sm font-medium">
-              Metode Pembayaran
-            </label>
-
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="w-full rounded-lg border px-3 py-2"
-            >
-              <option value="">
-                Pilih metode pembayaran
-              </option>
-              <option value="cash">Cash</option>
-              <option value="qris">QRIS</option>
-            </select>
-          </div>
-        </>
-      )}
-
-      {visitType === "member" && (
         <div>
           <label className="mb-2 block text-sm font-medium">
-            Biaya Kunjungan
+            Tanggal Kunjungan
           </label>
 
           <input
-            type="text"
-            value={
-              checkingMembership
-                ? "Memeriksa..."
-                : !memberId
-                  ? "Pilih member"
-                  : !visitDate
-                    ? "Pilih tanggal kunjungan"
-                    : memberHasActiveMembership
-                      ? "Rp 0"
-                      : "Tidak memiliki membership aktif"
-            }
-            readOnly
-            className="w-full rounded-lg border bg-gray-100 px-3 py-2"
+            type="date"
+            value={visitDate}
+            onChange={(e) => {
+              const date = e.target.value;
+              setVisitDate(date);
+
+              if (memberId) {
+                checkMembership(memberId, date);
+              }
+            }}
+            className="w-full rounded-lg border px-3 py-2"
           />
         </div>
-      )}
+      </form>
 
-      <div>
-        <label className="mb-2 block text-sm font-medium">
-          Tanggal Kunjungan
-        </label>
-
-        <input
-          type="date"
-          value={visitDate}
-          onChange={(e) => {
-            const date = e.target.value;
-            setVisitDate(date);
-
-            if (memberId) {
-              checkMembership(memberId, date);
-            }
-          }}
-          className="w-full rounded-lg border px-3 py-2"
-        />
-      </div>
-
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-      >
-        {saving ? "Menyimpan..." : "Simpan Kunjungan"}
-      </button>
-    </form>
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((prev) => ({ ...prev, open: false }))
+        }
+      />
+    </>
   );
 }

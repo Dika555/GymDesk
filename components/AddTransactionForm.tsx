@@ -4,6 +4,8 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import AddProductTransactionForm from "@/components/AddProductTransactionForm";
+import Select from "react-select";
+import FeedbackModal from "@/components/FeedbackModal";
 
 type Member = {
   id: string;
@@ -15,15 +17,20 @@ type MembershipPlan = {
   name: string;
   duration: number;
   price: number;
+  is_active: boolean;
 };
+
+type FeedbackType = "success" | "error" | "warning" | "info";
 
 type Props = {
   onSuccess: () => void;
+  showBodySubmit: boolean;
 };
 
-export default function AddTransactionForm({ onSuccess }: Props) {
-  const supabase = createClient();
-
+export default function AddTransactionForm({
+  onSuccess,
+  showBodySubmit,
+}: Props) {
   const [members, setMembers] = useState<Member[]>([]);
   const [membershipPlans, setMembershipPlans] = useState<MembershipPlan[]>(
     [],
@@ -39,6 +46,35 @@ export default function AddTransactionForm({ onSuccess }: Props) {
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
+  // State untuk notifikasi
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info",
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  function closeFeedback() {
+    setFeedback((prev) => ({
+      ...prev,
+      open: false,
+    }));
+  }
+
+  // Mengambil data member dan paket membership
   useEffect(() => {
     async function getData() {
       const branchId = getActiveBranchId();
@@ -48,6 +84,8 @@ export default function AddTransactionForm({ onSuccess }: Props) {
         setMembershipPlans([]);
         return;
       }
+
+      const supabase = createClient();
 
       const [
         { data: membersData, error: membersError },
@@ -61,8 +99,9 @@ export default function AddTransactionForm({ onSuccess }: Props) {
 
         supabase
           .from("membership_plans")
-          .select("id, name, duration, price")
+          .select("id, name, duration, price, is_active")
           .eq("branch_id", branchId)
+          .eq("is_active", true)
           .order("price", { ascending: true }),
       ]);
 
@@ -79,9 +118,10 @@ export default function AddTransactionForm({ onSuccess }: Props) {
       }
     }
 
-    getData();
+    void getData();
   }, []);
 
+  // Mengganti jenis transaksi dan mereset data formulir
   function handleTransactionTypeChange(value: string) {
     setTransactionType(value);
 
@@ -93,6 +133,7 @@ export default function AddTransactionForm({ onSuccess }: Props) {
     setNotes("");
   }
 
+  // Mengisi total berdasarkan harga paket yang dipilih
   function handlePlanChange(value: string) {
     setPlanId(value);
 
@@ -100,34 +141,55 @@ export default function AddTransactionForm({ onSuccess }: Props) {
       (plan) => plan.id === value,
     );
 
-    if (selectedPlan) {
-      setTotalAmount(String(selectedPlan.price));
-    } else {
-      setTotalAmount("");
-    }
+    setTotalAmount(
+      selectedPlan ? String(selectedPlan.price) : "",
+    );
   }
 
+  // Menyimpan transaksi membership atau transaksi lainnya
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (!totalAmount || Number(totalAmount) <= 0) {
-      alert("Total transaksi harus lebih dari 0.");
+    const amount = Number(totalAmount);
+
+    if (
+      !totalAmount ||
+      !Number.isFinite(amount) ||
+      amount <= 0
+    ) {
+      showFeedback(
+        "Total Tidak Valid",
+        "Total transaksi harus berupa angka lebih dari 0.",
+        "warning",
+      );
       return;
     }
 
     if (transactionType === "membership") {
       if (!memberId) {
-        alert("Silakan pilih member terlebih dahulu.");
+        showFeedback(
+          "Member Belum Dipilih",
+          "Silakan pilih member terlebih dahulu.",
+          "warning",
+        );
         return;
       }
 
       if (!planId) {
-        alert("Silakan pilih paket membership terlebih dahulu.");
+        showFeedback(
+          "Paket Belum Dipilih",
+          "Silakan pilih paket membership terlebih dahulu.",
+          "warning",
+        );
         return;
       }
 
       if (!startDate) {
-        alert("Silakan pilih tanggal mulai membership.");
+        showFeedback(
+          "Tanggal Belum Dipilih",
+          "Silakan pilih tanggal mulai membership.",
+          "warning",
+        );
         return;
       }
     }
@@ -136,89 +198,154 @@ export default function AddTransactionForm({ onSuccess }: Props) {
       transactionType === "other" &&
       !customerName.trim()
     ) {
-      alert("Silakan masukkan nama pelanggan.");
+      showFeedback(
+        "Nama Pelanggan Belum Diisi",
+        "Silakan masukkan nama pelanggan.",
+        "warning",
+      );
       return;
     }
 
     setSaving(true);
 
-    const supabase = createClient();
+    try {
+      const supabase = createClient();
+      const branchId = getActiveBranchId();
 
-    const branchId = getActiveBranchId();
+      if (!branchId) {
+        showFeedback(
+          "Cabang Belum Dipilih",
+          "Cabang aktif belum ditemukan. Periksa pilihan cabang terlebih dahulu.",
+          "error",
+        );
+        return;
+      }
 
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      setSaving(false);
-      return;
-    }
+      const transactionNote =
+        transactionType === "membership"
+          ? `Pembayaran membership${notes.trim() ? ` - ${notes.trim()}` : ""
+          }`
+          : notes.trim() || null;
 
-    const transactionNote =
-      transactionType === "membership"
-        ? `Pembayaran membership${notes.trim() ? ` - ${notes.trim()}` : ""
-        }`
-        : notes.trim() || null;
+      let error;
 
-    let error;
+      if (transactionType === "membership") {
+        const { error: rpcError } = await supabase.rpc(
+          "create_membership_transaction",
+          {
+            p_branch_id: branchId,
+            p_member_id: memberId,
+            p_plan_id: planId,
+            p_start_date: startDate,
+            p_payment_method: paymentMethod,
+            p_notes: transactionNote,
+          },
+        );
 
-    if (transactionType === "membership") {
-      const { error: rpcError } = await supabase.rpc(
-        "create_membership_transaction",
-        {
-          p_branch_id: branchId,
-          p_member_id: memberId,
-          p_plan_id: planId,
-          p_start_date: startDate,
-          p_payment_method: paymentMethod,
-          p_notes: transactionNote,
-        },
+        error = rpcError;
+      } else {
+        const { error: insertError } = await supabase
+          .from("transactions")
+          .insert({
+            branch_id: branchId,
+            member_id: null,
+            customer_name: customerName.trim(),
+            transaction_type: "other",
+            payment_method: paymentMethod,
+            total_amount: amount,
+            status: "completed",
+            notes: transactionNote,
+          });
+
+        error = insertError;
+      }
+
+      if (error) {
+        console.error(
+          "Gagal menyimpan transaksi:",
+          error,
+        );
+
+        showFeedback(
+          "Gagal Menyimpan Transaksi",
+          "Transaksi gagal disimpan. Silakan periksa data dan coba kembali.",
+          "error",
+        );
+        return;
+      }
+
+      // Reset formulir setelah berhasil
+      setTransactionType("membership");
+      setMemberId("");
+      setCustomerName("");
+      setPlanId("");
+      setStartDate("");
+      setPaymentMethod("cash");
+      setTotalAmount("");
+      setNotes("");
+
+      // Notifikasi sukses ditampilkan oleh halaman transaksi
+      onSuccess();
+    } catch (error) {
+      console.error("Terjadi kesalahan:", error);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Terjadi kesalahan saat menyimpan transaksi.",
+        "error",
       );
-
-      error = rpcError;
-    } else {
-      const { error: insertError } = await supabase
-        .from("transactions")
-        .insert({
-          branch_id: branchId,
-          member_id: memberId || null,
-          customer_name: memberId ? null : customerName.trim() || null,
-          transaction_type: "other",
-          payment_method: paymentMethod,
-          total_amount: Number(totalAmount),
-          status: "completed",
-          notes: transactionNote,
-        });
-
-      error = insertError;
-    }
-
-    if (error) {
-      console.error("Gagal menyimpan transaksi:", error);
-      alert(error.message);
+    } finally {
       setSaving(false);
-      return;
     }
-
-    alert("Transaksi berhasil disimpan.");
-
-    setTransactionType("membership");
-    setMemberId("");
-    setPlanId("");
-    setStartDate("");
-    setPaymentMethod("cash");
-    setTotalAmount("");
-    setNotes("");
-    setSaving(false);
-
-    onSuccess();
   }
 
-  /*
-   * Kalau jenis transaksi = Produk,
-   * gunakan form khusus produk.
-   */
+  // Tampilan khusus transaksi produk
   if (transactionType === "product") {
     return (
-      <div className="space-y-4">
+      <>
+        <div className="space-y-4">
+          <div>
+            <label className="mb-1 block text-sm font-medium text-zinc-700">
+              Jenis Transaksi
+            </label>
+
+            <select
+              value={transactionType}
+              onChange={(e) =>
+                handleTransactionTypeChange(e.target.value)
+              }
+              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+            >
+              <option value="membership">Membership</option>
+              <option value="product">Produk</option>
+              <option value="other">Lainnya</option>
+            </select>
+          </div>
+
+          <AddProductTransactionForm
+            onSuccess={onSuccess}
+            showSubmitButton={showBodySubmit}
+          />
+        </div>
+
+        <FeedbackModal
+          open={feedback.open}
+          title={feedback.title}
+          message={feedback.message}
+          type={feedback.type}
+          onClose={closeFeedback}
+        />
+      </>
+    );
+  }
+
+  return (
+    <>
+      <form
+        id="add-transaction-form"
+        onSubmit={handleSubmit}
+        className="space-y-4"
+      >
         {/* Jenis Transaksi */}
         <div>
           <label className="mb-1 block text-sm font-medium text-zinc-700">
@@ -227,7 +354,9 @@ export default function AddTransactionForm({ onSuccess }: Props) {
 
           <select
             value={transactionType}
-            onChange={(e) => handleTransactionTypeChange(e.target.value)}
+            onChange={(e) =>
+              handleTransactionTypeChange(e.target.value)
+            }
             className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
           >
             <option value="membership">Membership</option>
@@ -236,197 +365,190 @@ export default function AddTransactionForm({ onSuccess }: Props) {
           </select>
         </div>
 
-        <AddProductTransactionForm
-          onSuccess={onSuccess}
-        />
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Jenis Transaksi */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Jenis Transaksi
-        </label>
-
-        <select
-          value={transactionType}
-          onChange={(e) => handleTransactionTypeChange(e.target.value)}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        >
-          <option value="membership">Membership</option>
-          <option value="product">Produk</option>
-          <option value="other">Lainnya</option>
-        </select>
-      </div>
-
-      {/* Member */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Member
-        </label>
-
-        <select
-          value={memberId}
-          onChange={(e) => setMemberId(e.target.value)}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        >
-          <option value="">Non-member</option>
-
-          {members.map((member) => (
-            <option key={member.id} value={member.id}>
-              {member.name}
-            </option>
-          ))}
-        </select>
-
+        {/* Member — hanya untuk transaksi membership */}
         {transactionType === "membership" && (
-          <p className="mt-1 text-xs text-zinc-500">
-            Pembayaran membership harus dikaitkan dengan member.
-          </p>
-        )}
-      </div>
-
-      {/* Nama Pelanggan */}
-      {transactionType === "other" && (
-        <div>
-          <label className="mb-1 block text-sm font-medium text-zinc-700">
-            Nama Pelanggan
-          </label>
-
-          <input
-            type="text"
-            value={customerName}
-            onChange={(e) => setCustomerName(e.target.value)}
-            placeholder="Masukkan nama pelanggan"
-            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-          />
-
-          <p className="mt-1 text-xs text-zinc-500">
-            Isi jika transaksi dilakukan oleh non-member.
-          </p>
-        </div>
-      )}
-
-      {/* Detail Membership */}
-      {transactionType === "membership" && (
-        <>
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Paket Membership
+              Member
             </label>
 
-            <select
-              value={planId}
-              onChange={(e) => handlePlanChange(e.target.value)}
-              className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-              required
-            >
-              <option value="">Pilih paket membership</option>
+            <Select
+              options={[
+                { value: "", label: "Cari member..." },
+                ...members.map((member) => ({
+                  value: member.id,
+                  label: member.name,
+                })),
+              ]}
+              value={
+                [
+                  { value: "", label: "Cari member..." },
+                  ...members.map((member) => ({
+                    value: member.id,
+                    label: member.name,
+                  })),
+                ].find((member) => member.value === memberId) ?? null
+              }
+              onChange={(option) => setMemberId(option?.value ?? "")}
+              placeholder="Cari member..."
+              noOptionsMessage={() => "Member tidak ditemukan"}
+            />
 
-              {membershipPlans.map((plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name} - Rp{" "}
-                  {plan.price.toLocaleString("id-ID")} (
-                  {plan.duration} bulan)
-                </option>
-              ))}
-            </select>
+            <p className="mt-1 text-xs text-zinc-500">
+              Pembayaran membership harus dikaitkan dengan member.
+            </p>
           </div>
+        )}
 
+        {/* Nama Pelanggan */}
+        {transactionType === "other" && (
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">
-              Tanggal Mulai
+              Nama Pelanggan
             </label>
 
             <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
+              type="text"
+              value={customerName}
+              onChange={(e) =>
+                setCustomerName(e.target.value)
+              }
+              placeholder="Masukkan nama pelanggan"
               className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-              required
             />
+
+            <p className="mt-1 text-xs text-zinc-500">
+              Isi jika transaksi dilakukan oleh non-member.
+            </p>
           </div>
-        </>
-      )}
+        )}
 
-      {/* Informasi Lainnya */}
-      {transactionType === "other" && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-          <p className="text-sm font-medium text-zinc-800">
-            Transaksi Lainnya
-          </p>
+        {/* Detail Membership */}
+        {transactionType === "membership" && (
+          <>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Paket Membership
+              </label>
 
-          <p className="mt-1 text-sm text-zinc-500">
-            Gunakan jenis ini untuk transaksi yang tidak termasuk
-            membership atau produk.
-          </p>
+              <select
+                value={planId}
+                onChange={(e) =>
+                  handlePlanChange(e.target.value)
+                }
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+                required
+              >
+                <option value="">
+                  Pilih paket membership
+                </option>
+
+                {membershipPlans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} - Rp{" "}
+                    {plan.price.toLocaleString("id-ID")} (
+                    {plan.duration} bulan)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Tanggal Mulai
+              </label>
+
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) =>
+                  setStartDate(e.target.value)
+                }
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+                required
+              />
+            </div>
+          </>
+        )}
+
+        {/* Metode Pembayaran */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Metode Pembayaran
+          </label>
+
+          <select
+            value={paymentMethod}
+            onChange={(e) =>
+              setPaymentMethod(e.target.value)
+            }
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+          >
+            <option value="cash">Cash</option>
+            <option value="qris">QRIS</option>
+            <option value="transfer">Transfer</option>
+          </select>
         </div>
-      )}
 
-      {/* Metode Pembayaran */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Metode Pembayaran
-        </label>
+        {/* Total Transaksi */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Total Transaksi
+          </label>
 
-        <select
-          value={paymentMethod}
-          onChange={(e) => setPaymentMethod(e.target.value)}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        >
-          <option value="cash">Cash</option>
-          <option value="qris">QRIS</option>
-          <option value="transfer">Transfer</option>
-        </select>
-      </div>
+          <input
+            type="number"
+            min="1"
+            value={totalAmount}
+            readOnly={transactionType === "membership"}
+            onChange={(e) =>
+              setTotalAmount(e.target.value)
+            }
+            placeholder="Contoh: 50000"
+            className={`w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500 ${transactionType === "membership"
+              ? "bg-zinc-100 text-zinc-600"
+              : ""
+              }`}
+            required
+          />
+        </div>
 
-      {/* Total */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Total Transaksi
-        </label>
+        {/* Catatan */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Catatan
+          </label>
 
-        <input
-          type="number"
-          min="1"
-          value={totalAmount}
-          readOnly={transactionType === "membership"}
-          onChange={(e) => setTotalAmount(e.target.value)}
-          placeholder="Contoh: 50000"
-          className={`w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500 ${transactionType === "membership"
-            ? "bg-zinc-100 text-zinc-600"
-            : ""
-            }`}
-          required
-        />
-      </div>
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Opsional"
+            rows={3}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+          />
+        </div>
 
-      {/* Catatan */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Catatan
-        </label>
+        {/* Tombol submit untuk penggunaan form mandiri */}
+        {showBodySubmit && (
+          <div className="flex justify-end pt-2">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {saving ? "Menyimpan..." : "Simpan Transaksi"}
+            </button>
+          </div>
+        )}
+      </form >
 
-        <textarea
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-          placeholder="Opsional"
-          rows={3}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        />
-      </div>
-
-      {/* Submit */}
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "Menyimpan..." : "Simpan Transaksi"}
-      </button>
-    </form>
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={closeFeedback}
+      />
+    </>
   );
 }

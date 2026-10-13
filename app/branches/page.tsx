@@ -1,7 +1,19 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import BranchModal from "@/components/branches/BranchModal";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import FeedbackModal from "@/components/FeedbackModal";
+import Modal from "@/components/Modal";
+import {
+  Building2,
+  Pencil,
+  Power,
+  PowerOff,
+  CircleAlert,
+} from "lucide-react";
 
 type Branch = {
   id: string;
@@ -11,12 +23,28 @@ type Branch = {
   is_active: boolean;
 };
 
+type FeedbackType = "success" | "error" | "warning" | "info";
+
+type Feedback = {
+  open: boolean;
+  title: string;
+  message: string;
+  type: FeedbackType;
+};
+
 export default function BranchesPage() {
   const supabase = createClient();
 
   const [branches, setBranches] = useState<Branch[]>([]);
   const [authorized, setAuthorized] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [changingStatus, setChangingStatus] = useState(false);
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -24,53 +52,87 @@ export default function BranchesPage() {
 
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [confirmBranch, setConfirmBranch] = useState<Branch | null>(null);
 
-  async function loadBranches() {
-    setLoading(true);
+  const [feedback, setFeedback] = useState<Feedback>({
+    open: false,
+    title: "",
+    message: "",
+    type: "info",
+  });
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-
-    if (!user) {
-      setAuthorized(false);
-      setLoading(false);
-      return;
-    }
-
-    const { data: profile, error: profileError } = await supabase
-      .from("users")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-
-    if (profileError || profile?.role !== "super_admin") {
-      setAuthorized(false);
-      setLoading(false);
-      return;
-    }
-
-    setAuthorized(true);
-
-    const { data, error } = await supabase
-      .from("branches")
-      .select("id, name, address, phone, is_active")
-      .order("name");
-
-    if (error) {
-      console.error(error);
-      alert("Gagal mengambil data cabang.");
-      setLoading(false);
-      return;
-    }
-
-    setBranches(data || []);
-    setLoading(false);
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
   }
 
+  const loadBranches = useCallback(async () => {
+    setLoading(true);
+
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError || !user) {
+        console.error("Gagal memeriksa login:", authError);
+        setAuthorized(false);
+        return;
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from("users")
+        .select("role")
+        .eq("id", user.id)
+        .single();
+
+      if (profileError || profile?.role !== "super_admin") {
+        setAuthorized(false);
+        return;
+      }
+
+      setAuthorized(true);
+
+      const { data, error } = await supabase
+        .from("branches")
+        .select("id, name, address, phone, is_active")
+        .order("name");
+
+      if (error) {
+        console.error("Gagal mengambil data cabang:", error);
+        showFeedback(
+          "Gagal Memuat Cabang",
+          "Data cabang tidak dapat dimuat. Silakan coba lagi.",
+          "error"
+        );
+        return;
+      }
+
+      setBranches(data ?? []);
+    } catch (error) {
+      console.error("Terjadi kesalahan saat memuat cabang:", error);
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Data cabang gagal dimuat. Periksa koneksi lalu coba lagi.",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase]);
+
   useEffect(() => {
-    loadBranches();
-  }, []);
+    void loadBranches();
+  }, [loadBranches]);
 
   function openAddForm() {
     setEditingId(null);
@@ -83,12 +145,14 @@ export default function BranchesPage() {
   function openEditForm(branch: Branch) {
     setEditingId(branch.id);
     setName(branch.name);
-    setAddress(branch.address || "");
-    setPhone(branch.phone || "");
+    setAddress(branch.address ?? "");
+    setPhone(branch.phone ?? "");
     setShowForm(true);
   }
 
   function closeForm() {
+    if (saving) return;
+
     setShowForm(false);
     setEditingId(null);
     setName("");
@@ -96,92 +160,181 @@ export default function BranchesPage() {
     setPhone("");
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  function resetFormAfterSave() {
+    setShowForm(false);
+    setEditingId(null);
+    setName("");
+    setAddress("");
+    setPhone("");
+  }
 
-    if (!name.trim()) {
-      alert("Nama cabang wajib diisi.");
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    if (saving) return;
+
+    const trimmedName = name.trim();
+
+    if (!trimmedName) {
+      showFeedback(
+        "Nama Cabang Wajib Diisi",
+        "Masukkan nama cabang sebelum menyimpan.",
+        "warning"
+      );
       return;
     }
 
-    if (editingId) {
+    setSaving(true);
+
+    try {
+      if (editingId) {
+        const { error } = await supabase
+          .from("branches")
+          .update({
+            name: trimmedName,
+            address: address.trim() || null,
+            phone: phone.trim() || null,
+          })
+          .eq("id", editingId);
+
+        if (error) {
+          console.error("Gagal mengubah cabang:", error);
+          showFeedback(
+            "Gagal Mengubah Cabang",
+            error.message,
+            "error"
+          );
+          return;
+        }
+
+        resetFormAfterSave();
+
+        showFeedback(
+          "Cabang Berhasil Diubah",
+          `Data cabang "${trimmedName}" berhasil diperbarui.`,
+          "success"
+        );
+      } else {
+        const { error } = await supabase
+          .from("branches")
+          .insert({
+            name: trimmedName,
+            address: address.trim() || null,
+            phone: phone.trim() || null,
+          });
+
+        if (error) {
+          console.error("Gagal menambahkan cabang:", error);
+          showFeedback(
+            "Gagal Menambahkan Cabang",
+            error.message,
+            "error"
+          );
+          return;
+        }
+
+        resetFormAfterSave();
+
+        showFeedback(
+          "Cabang Berhasil Ditambahkan",
+          `Cabang "${trimmedName}" berhasil ditambahkan.`,
+          "success"
+        );
+      }
+
+      await loadBranches();
+    } catch (error) {
+      console.error("Terjadi kesalahan saat menyimpan cabang:", error);
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Cabang gagal disimpan. Periksa koneksi lalu coba lagi.",
+        "error"
+      );
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleToggleStatus() {
+    if (!confirmBranch || changingStatus) return;
+
+    const branch = confirmBranch;
+    const newStatus = !branch.is_active;
+
+    setChangingStatus(true);
+
+    try {
       const { error } = await supabase
         .from("branches")
         .update({
-          name: name.trim(),
-          address: address.trim() || null,
-          phone: phone.trim() || null,
+          is_active: newStatus,
         })
-        .eq("id", editingId);
+        .eq("id", branch.id);
 
       if (error) {
-        console.error(error);
-        alert("Gagal mengubah cabang.");
+        console.error("Gagal mengubah status cabang:", error);
+        setConfirmBranch(null);
+
+        showFeedback(
+          "Gagal Mengubah Status Cabang",
+          error.message,
+          "error"
+        );
         return;
       }
 
-      alert("Cabang berhasil diubah.");
-    } else {
-      const { error } = await supabase
-        .from("branches")
-        .insert({
-          name: name.trim(),
-          address: address.trim() || null,
-          phone: phone.trim() || null,
-        });
+      setConfirmBranch(null);
 
-      if (error) {
-        console.error(error);
-        alert("Gagal menambahkan cabang.");
-        return;
-      }
+      showFeedback(
+        newStatus ? "Cabang Berhasil Diaktifkan" : "Cabang Berhasil Dinonaktifkan",
+        `Cabang "${branch.name}" berhasil ${
+          newStatus ? "diaktifkan" : "dinonaktifkan"
+        }.`,
+        "success"
+      );
 
-      alert("Cabang berhasil ditambahkan.");
+      await loadBranches();
+    } catch (error) {
+      console.error("Terjadi kesalahan saat mengubah status cabang:", error);
+      setConfirmBranch(null);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Status cabang gagal diubah. Silakan coba lagi.",
+        "error"
+      );
+    } finally {
+      setChangingStatus(false);
     }
-
-    closeForm();
-    loadBranches();
   }
 
-  async function handleToggleStatus(branch: Branch) {
-    const newStatus = !branch.is_active;
+  const filteredBranches = branches.filter((branch) => {
+    const keyword = search.trim().toLowerCase();
 
-    const action = newStatus
-      ? "mengaktifkan"
-      : "menonaktifkan";
+    const matchesSearch =
+      branch.name.toLowerCase().includes(keyword) ||
+      (branch.address ?? "").toLowerCase().includes(keyword) ||
+      (branch.phone ?? "").toLowerCase().includes(keyword);
 
-    const confirmed = window.confirm(
-      `Apakah kamu yakin ingin ${action} cabang "${branch.name}"?`
-    );
+    const matchesStatus =
+      statusFilter === "all" ||
+      (statusFilter === "active" && branch.is_active) ||
+      (statusFilter === "inactive" && !branch.is_active);
 
-    if (!confirmed) {
-      return;
-    }
+    return matchesSearch && matchesStatus;
+  });
 
-    const { error } = await supabase
-      .from("branches")
-      .update({
-        is_active: newStatus,
-      })
-      .eq("id", branch.id);
+  const totalPages = Math.ceil(
+    filteredBranches.length / ITEMS_PER_PAGE
+  );
 
-    if (error) {
-      console.error("Gagal mengubah status cabang:", error);
-      alert("Gagal mengubah status cabang: " + error.message);
-      return;
-    }
-
-    alert(
-      newStatus
-        ? "Cabang berhasil diaktifkan."
-        : "Cabang berhasil dinonaktifkan."
-    );
-
-    loadBranches();
-  }
+  const paginatedBranches = filteredBranches.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   return (
-    <main className="min-h-screen bg-white p-8 text-zinc-900">
+    <main className="min-h-screen bg-zinc-50 p-4 text-zinc-900 sm:p-6 lg:p-8">
       {authorized === null ? (
         <div className="flex min-h-[70vh] items-center justify-center">
           <p className="text-zinc-500">Memeriksa akses...</p>
@@ -190,7 +343,6 @@ export default function BranchesPage() {
         <div className="flex min-h-[70vh] items-center justify-center">
           <div className="text-center">
             <h1 className="text-2xl font-bold">Akses Ditolak</h1>
-
             <p className="mt-2 text-zinc-500">
               Halaman ini hanya dapat diakses oleh Super Admin.
             </p>
@@ -198,205 +350,277 @@ export default function BranchesPage() {
         </div>
       ) : (
         <>
-          <div className="mb-8 flex items-center justify-between">
-            <div>
-              <h1 className="text-3xl font-bold">Kelola Cabang</h1>
+          {/* Header halaman */}
+          <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+                <Building2 size={26} />
+              </div>
 
-              <p className="mt-2 text-zinc-500">
-                Kelola daftar cabang gym yang terdaftar di GymDesk.
-              </p>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+                  Kelola Cabang
+                </h1>
+                <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+                  Kelola daftar cabang gym yang terdaftar di GymDesk.
+                </p>
+              </div>
             </div>
 
             <button
+              type="button"
               onClick={openAddForm}
-              className="rounded-lg bg-orange-500 px-5 py-3 font-medium text-white hover:bg-orange-600"
+              disabled={loading || saving}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              + Tambah Cabang
+              <Building2 size={18} />
+              Tambah Cabang
             </button>
           </div>
 
           {showForm && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4">
-              <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-                <div className="mb-6 flex items-center justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-zinc-900">
-                      {editingId ? "Edit Cabang" : "Tambah Cabang"}
-                    </h2>
-
-                    <p className="mt-1 text-sm text-zinc-500">
-                      {editingId
-                        ? "Ubah informasi cabang."
-                        : "Tambahkan cabang baru ke GymDesk."}
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={closeForm}
-                    className="text-zinc-400 hover:text-zinc-900"
-                  >
-                    ✕
-                  </button>
-                </div>
-
-                <form onSubmit={handleSubmit} className="space-y-5">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-zinc-700">
-                      Nama Cabang
-                    </label>
-
-                    <input
-                      type="text"
-                      value={name}
-                      onChange={(e) => setName(e.target.value)}
-                      placeholder="Nama cabang"
-                      className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-zinc-700">
-                      Alamat
-                    </label>
-
-                    <textarea
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      placeholder="Alamat cabang"
-                      rows={3}
-                      className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-zinc-700">
-                      Nomor Telepon
-                    </label>
-
-                    <input
-                      type="text"
-                      value={phone}
-                      onChange={(e) => setPhone(e.target.value)}
-                      placeholder="Nomor telepon"
-                      className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
-                    />
-                  </div>
-
-                  <div className="flex justify-end gap-3 pt-2">
-                    <button
-                      type="button"
-                      onClick={closeForm}
-                      className="rounded-lg border border-zinc-300 px-5 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                    >
-                      Batal
-                    </button>
-
-                    <button
-                      type="submit"
-                      className="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-medium text-white hover:bg-orange-600"
-                    >
-                      {editingId ? "Simpan Perubahan" : "Simpan Cabang"}
-                    </button>
-                  </div>
-                </form>
-              </div>
-            </div>
+            <BranchModal
+              editingId={editingId}
+              name={name}
+              address={address}
+              phone={phone}
+              onNameChange={setName}
+              onAddressChange={setAddress}
+              onPhoneChange={setPhone}
+              onSubmit={handleSubmit}
+              onClose={closeForm}
+            />
           )}
 
-          <div className="overflow-hidden rounded-xl border border-zinc-200">
-            <table className="w-full">
-              <thead className="bg-zinc-50">
-                <tr className="border-b border-zinc-200 text-left">
-                  <th className="px-6 py-4">No</th>
-                  <th className="px-6 py-4">Nama Cabang</th>
-                  <th className="px-6 py-4">Alamat</th>
-                  <th className="px-6 py-4">Telepon</th>
-                  <th className="px-6 py4">Status</th>
-                  <th className="px-6 py-4">Aksi</th>
-                </tr>
-              </thead>
+          {/* Pencarian dan filter */}
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+            <div className="flex-1">
+              <Search
+                value={search}
+                onChange={(value) => {
+                  setSearch(value);
+                  setCurrentPage(1);
+                }}
+                placeholder="Cari nama, alamat, atau nomor telepon..."
+              />
+            </div>
 
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-8 text-center text-zinc-500"
-                    >
-                      Memuat data...
-                    </td>
-                  </tr>
-                ) : branches.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-6 py-8 text-center text-zinc-500"
-                    >
-                      Belum ada cabang.
-                    </td>
-                  </tr>
-                ) : (
-                  branches.map((branch, index) => (
-                    <tr
-                      key={branch.id}
-                      className="border-b border-zinc-100 last:border-0"
-                    >
-                      <td className="px-6 py-4">{index + 1}</td>
-
-                      <td className="px-6 py-4 font-medium">
-                        {branch.name}
-                      </td>
-
-                      <td className="px-6 py-4 text-zinc-600">
-                        {branch.address || "-"}
-                      </td>
-
-                      <td className="px-6 py-4 text-zinc-600">
-                        {branch.phone || "-"}
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <span
-                          className={
-                            branch.is_active
-                              ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700"
-                              : "rounded-full bg-red-100 px-3 py-1 text-xs font-medium text-red-700"
-                          }
-                        >
-                          {branch.is_active ? "Aktif" : "Nonaktif"}
-                        </span>
-                      </td>
-
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2">
-                          <button
-                            onClick={() => openEditForm(branch)}
-                            className="rounded-md border border-zinc-300 px-3 py-2 text-sm hover:bg-zinc-100"
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            onClick={() => handleToggleStatus(branch)}
-                            className={
-                              branch.is_active
-                                ? "rounded-md border border-red-300 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                : "rounded-md border border-green-300 px-3 py-2 text-sm text-green-600 hover:bg-green-50"
-                            }
-                          >
-                            {branch.is_active ? "Nonaktifkan" : "Aktifkan"}
-                          </button>
-                        </div>
-                      </td> 
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+            <select
+              value={statusFilter}
+              onChange={(event) => {
+                setStatusFilter(event.target.value);
+                setCurrentPage(1);
+              }}
+              className="rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-orange-500"
+            >
+              <option value="all">Semua Status</option>
+              <option value="active">Aktif</option>
+              <option value="inactive">Nonaktif</option>
+            </select>
           </div>
+
+          {/* Tabel cabang */}
+          <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+            {loading ? (
+              <div className="p-6 text-sm text-zinc-500">
+                Memuat data cabang...
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[850px] text-left">
+                  <thead>
+                    <tr className="border-b-2 border-zinc-200 bg-zinc-100">
+                      {[
+                        "No",
+                        "Nama Cabang",
+                        "Alamat",
+                        "Telepon",
+                        "Status",
+                        "Aksi",
+                      ].map((heading) => (
+                        <th
+                          key={heading}
+                          className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700"
+                        >
+                          {heading}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+
+                  <tbody className="divide-y divide-zinc-100">
+                    {filteredBranches.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={6}
+                          className="px-4 py-10 text-center text-sm text-zinc-500"
+                        >
+                          {search || statusFilter !== "all"
+                            ? "Cabang tidak ditemukan."
+                            : "Belum ada data cabang."}
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedBranches.map((branch, index) => (
+                        <tr
+                          key={branch.id}
+                          className="transition-colors hover:bg-zinc-50"
+                        >
+                          <td className="px-4 py-4 text-sm text-zinc-500">
+                            {(currentPage - 1) * ITEMS_PER_PAGE + index + 1}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-semibold text-zinc-900">
+                            {branch.name}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-zinc-600">
+                            {branch.address || "-"}
+                          </td>
+
+                          <td className="whitespace-nowrap px-4 py-4 text-sm text-zinc-600">
+                            {branch.phone || "-"}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                                branch.is_active
+                                  ? "bg-green-50 text-green-700 ring-green-200"
+                                  : "bg-red-50 text-red-700 ring-red-200"
+                              }`}
+                            >
+                              {branch.is_active ? "Aktif" : "Nonaktif"}
+                            </span>
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <div className="flex justify-end gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditForm(branch)}
+                                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                              >
+                                <Pencil size={14} />
+                                Edit
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => setConfirmBranch(branch)}
+                                disabled={changingStatus}
+                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                                  branch.is_active
+                                    ? "border-red-200 text-red-600 hover:bg-red-50"
+                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                }`}
+                              >
+                                {branch.is_active ? (
+                                  <PowerOff size={14} />
+                                ) : (
+                                  <Power size={14} />
+                                )}
+                                {branch.is_active ? "Nonaktifkan" : "Aktifkan"}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
+
+          {!loading && totalPages > 0 && (
+            <Pagination
+              currentPage={currentPage}
+              totalPages={totalPages}
+              totalItems={filteredBranches.length}
+              itemsPerPage={ITEMS_PER_PAGE}
+              onPageChange={setCurrentPage}
+            />
+          )}
         </>
       )}
+
+      {/* Konfirmasi aktivasi/nonaktivasi cabang */}
+      {confirmBranch && (
+        <Modal
+          title={
+            confirmBranch.is_active
+              ? "Nonaktifkan Cabang"
+              : "Aktifkan Cabang"
+          }
+          onClose={() => {
+            if (!changingStatus) setConfirmBranch(null);
+          }}
+          maxWidth="max-w-md"
+          footer={
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setConfirmBranch(null)}
+                disabled={changingStatus}
+                className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={() => void handleToggleStatus()}
+                disabled={changingStatus}
+                className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${
+                  confirmBranch.is_active
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
+              >
+                {changingStatus
+                  ? "Memproses..."
+                  : confirmBranch.is_active
+                    ? "Ya, Nonaktifkan"
+                    : "Ya, Aktifkan"}
+              </button>
+            </div>
+          }
+        >
+          <p className="text-sm leading-6 text-zinc-600">
+            Apakah kamu yakin ingin{" "}
+            <span className="font-semibold">
+              {confirmBranch.is_active ? "menonaktifkan" : "mengaktifkan"}
+            </span>{" "}
+            cabang{" "}
+            <span className="font-semibold text-zinc-900">
+              &quot;{confirmBranch.name}&quot;
+            </span>
+            ?
+          </p>
+
+          {confirmBranch.is_active && (
+            <p className="mt-3 text-sm leading-6 text-amber-700">
+              Pastikan cabang tersebut memang perlu dinonaktifkan sebelum
+              melanjutkan.
+            </p>
+          )}
+        </Modal>
+      )}
+
+      {/* Notifikasi hasil aksi */}
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((previous) => ({
+            ...previous,
+            open: false,
+          }))
+        }
+      />
     </main>
   );
 }

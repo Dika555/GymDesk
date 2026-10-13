@@ -4,21 +4,22 @@ import { createClient as createServerClient } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
-    // Cek user yang sedang login
+    // 1. Pastikan pengguna sudah login
     const supabase = await createServerClient();
 
     const {
       data: { user },
+      error: authUserError,
     } = await supabase.auth.getUser();
 
-    if (!user) {
+    if (authUserError || !user) {
       return NextResponse.json(
-        { error: "Anda belum login." },
+        { error: "Silakan login terlebih dahulu." },
         { status: 401 }
       );
     }
 
-    // Cek role user
+    // 2. Pastikan pengguna adalah Super Admin
     const { data: profile, error: profileError } = await supabase
       .from("users")
       .select("role")
@@ -27,84 +28,155 @@ export async function POST(request: Request) {
 
     if (profileError || profile?.role !== "super_admin") {
       return NextResponse.json(
-        { error: "Akses hanya untuk Super Admin." },
+        { error: "Anda tidak memiliki akses untuk melakukan tindakan ini." },
         { status: 403 }
       );
     }
 
-    const body = await request.json();
+    // 3. Baca dan validasi data
+    let body: {
+      name?: unknown;
+      email?: unknown;
+      password?: unknown;
+      branch_id?: unknown;
+    };
 
-    const { name, email, password, branch_id } = body;
-
-    if (!name || !email || !password || !branch_id) {
+    try {
+      body = await request.json();
+    } catch {
       return NextResponse.json(
-        { error: "Semua data Admin wajib diisi." },
+        { error: "Format data tidak valid." },
         { status: 400 }
       );
     }
 
-    // Service role hanya digunakan di server
+    const { name, email, password, branch_id } = body;
+
+    if (
+      typeof name !== "string" ||
+      typeof email !== "string" ||
+      typeof password !== "string" ||
+      typeof branch_id !== "string"
+    ) {
+      return NextResponse.json(
+        { error: "Data Admin tidak valid." },
+        { status: 400 }
+      );
+    }
+
+    const cleanName = name.trim();
+    const cleanEmail = email.trim().toLowerCase();
+
+    if (
+      cleanName.length < 2 ||
+      cleanName.length > 100 ||
+      cleanEmail.length > 254 ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail) ||
+      password.length < 8 ||
+      password.length > 128 ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        branch_id
+      )
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "Nama, email, password, atau pilihan cabang tidak memenuhi ketentuan.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 4. Ambil konfigurasi server
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json(
+        { error: "Konfigurasi server belum lengkap." },
+        { status: 500 }
+      );
+    }
+
+    // 5. Buat client admin khusus di server
     const supabaseAdmin = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+      supabaseUrl,
+      serviceRoleKey,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+        },
+      }
     );
 
-    // Pastikan cabang benar-benar ada
+    // 6. Pastikan cabang tersedia
     const { data: branch, error: branchError } = await supabaseAdmin
       .from("branches")
       .select("id")
       .eq("id", branch_id)
-      .single();
+      .maybeSingle();
 
-    if (branchError || !branch) {
+    if (branchError) {
+      return NextResponse.json(
+        { error: "Cabang gagal diperiksa." },
+        { status: 500 }
+      );
+    }
+
+    if (!branch) {
       return NextResponse.json(
         { error: "Cabang tidak ditemukan." },
         { status: 400 }
       );
     }
 
-    // Buat akun Auth
-    const {
-      data: authData,
-      error: authError,
-    } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-    });
+    // 7. Buat akun autentikasi
+    const { data: authData, error: createUserError } =
+      await supabaseAdmin.auth.admin.createUser({
+        email: cleanEmail,
+        password,
+        email_confirm: true,
+      });
 
-    if (authError) {
+    if (createUserError || !authData.user) {
       return NextResponse.json(
-        { error: authError.message },
+        { error: "Akun Admin gagal dibuat. Periksa data yang dimasukkan." },
         { status: 400 }
       );
     }
 
-    if (!authData.user) {
-      return NextResponse.json(
-        { error: "Akun Admin gagal dibuat." },
-        { status: 500 }
-      );
-    }
-
-    // Buat profil Admin
-    const { error: profileInsertError } = await supabaseAdmin
+    // 8. Buat profil Admin
+    const { error: insertProfileError } = await supabaseAdmin
       .from("users")
       .insert({
         id: authData.user.id,
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         role: "admin",
         branch_id,
       });
 
-    if (profileInsertError) {
-      // Kalau profil gagal dibuat, akun Auth juga dibatalkan
-      await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+    if (insertProfileError) {
+      // Batalkan akun Auth jika pembuatan profil gagal
+      const { error: deleteUserError } =
+        await supabaseAdmin.auth.admin.deleteUser(authData.user.id);
+
+      if (deleteUserError) {
+        // Jangan cetak objek error atau data akun ke console.
+        // Akun tanpa profil perlu diperiksa melalui log server yang aman.
+        return NextResponse.json(
+          {
+            error:
+              "Profil Admin gagal dibuat dan perlu pemeriksaan oleh pengelola sistem.",
+          },
+          { status: 500 }
+        );
+      }
 
       return NextResponse.json(
-        { error: profileInsertError.message },
-        { status: 400 }
+        { error: "Profil Admin gagal dibuat." },
+        { status: 500 }
       );
     }
 
@@ -112,9 +184,8 @@ export async function POST(request: Request) {
       success: true,
       message: "Admin berhasil dibuat.",
     });
-  } catch (error) {
-    console.error(error);
-
+  } catch {
+    // Jangan kirim detail error internal kepada pengguna.
     return NextResponse.json(
       { error: "Terjadi kesalahan pada server." },
       { status: 500 }

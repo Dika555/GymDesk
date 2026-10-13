@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import Select from "react-select";
 
 type Product = {
   id: string;
@@ -12,10 +13,12 @@ type Product = {
 
 type AddStockFormProps = {
   onSuccess: () => void;
+  onError: (message: string) => void;
 };
 
 export default function AddStockForm({
   onSuccess,
+  onError,
 }: AddStockFormProps) {
   const supabase = createClient();
 
@@ -36,6 +39,7 @@ export default function AddStockForm({
     if (!branchId) {
       setProducts([]);
       setLoadingProducts(false);
+      onError("Pilih cabang aktif terlebih dahulu.");
       return;
     }
 
@@ -46,110 +50,143 @@ export default function AddStockForm({
       .order("name", { ascending: true });
 
     if (error) {
-      console.error(error);
-      alert("Gagal mengambil data produk.");
+      console.error("Gagal mengambil data produk:", error);
+      onError("Gagal memuat data produk. Silakan coba lagi.");
     } else {
-      setProducts(data || []);
+      setProducts(data ?? []);
     }
 
     setLoadingProducts(false);
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-
-    if (!productId) {
-      alert("Pilih produk terlebih dahulu.");
-      return;
-    }
 
     const amount = Number(quantity);
 
-    if (!amount || amount <= 0) {
-      alert("Jumlah stok harus lebih dari 0.");
+    if (
+      !productId ||
+      !quantity ||
+      !Number.isInteger(amount) ||
+      amount <= 0
+    ) {
+      onError("Jumlah stok harus berupa bilangan bulat lebih dari 0.");
+      return;
+    }
+
+    const branchId = getActiveBranchId();
+
+    if (!branchId) {
+      onError("Pilih cabang aktif terlebih dahulu.");
       return;
     }
 
     setSaving(true);
 
+    try {
+      const { error } = await supabase.rpc("add_stock", {
+        p_branch_id: branchId,
+        p_product_id: productId,
+        p_quantity: amount,
+        p_description: description.trim() || null,
+      });
 
-    const branchId = getActiveBranchId();
+      if (error) {
+        console.error("Gagal menambahkan stok:", error);
+        onError(error.message || "Gagal menambahkan stok.");
+        return;
+      }
 
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      setSaving(false);
-      return;
-    }
+      setProductId("");
+      setQuantity("");
+      setDescription("");
 
-    const { error } = await supabase.rpc("add_stock", {
-      p_branch_id: branchId,
-      p_product_id: productId,
-      p_quantity: amount,
-      p_description: description.trim() || null,
-    });
-
-    if (error) {
+      onSuccess();
+    } catch (error) {
       console.error("Gagal menambahkan stok:", error);
-      alert(error.message);
+      onError("Terjadi kesalahan. Silakan coba lagi.");
+    } finally {
       setSaving(false);
-      return;
     }
-
-    alert("Stok berhasil ditambahkan.");
-
-    setProductId("");
-    setQuantity("");
-    setDescription("");
-    setSaving(false);
-
-    onSuccess();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      id="add-stock-form"
+      onSubmit={handleSubmit}
+      className="w-full space-y-6"
+    >
+      {/* Produk */}
       <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
+        <label className="mb-2 block text-sm font-semibold text-zinc-700">
           Produk
         </label>
 
-        <select
-          value={productId}
-          onChange={(e) => setProductId(e.target.value)}
-          disabled={loadingProducts || saving}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
-        >
-          <option value="">
-            {loadingProducts
-              ? "Memuat produk..."
-              : "Pilih produk"}
-          </option>
+        <Select
+          options={products.map((product) => ({
+            value: product.id,
+            label: `${product.name} — Stok saat ini: ${product.stock}`,
+          }))}
+          value={
+            products
+              .map((product) => ({
+                value: product.id,
+                label: `${product.name} — Stok saat ini: ${product.stock}`,
+              }))
+              .find((product) => product.value === productId) ?? null
+          }
+          onChange={(option) => setProductId(option?.value ?? "")}
+          isDisabled={loadingProducts || saving}
+          isSearchable
+          placeholder={
+            loadingProducts ? "Memuat produk..." : "Cari nama produk..."
+          }
+          noOptionsMessage={() => "Produk tidak ditemukan"}
+          styles={{
+            control: (base) => ({
+              ...base,
+              minHeight: "44px",
+              borderRadius: "8px",
+              borderColor: "#d4d4d8",
+              boxShadow: "none",
+              fontSize: "14px",
+            }),
+          }}
+        />
 
-          {products.map((product) => (
-            <option key={product.id} value={product.id}>
-              {product.name} — Stok saat ini: {product.stock}
-            </option>
-          ))}
-        </select>
+        <input
+          type="text"
+          required
+          tabIndex={-1}
+          aria-hidden="true"
+          value={productId}
+          onChange={() => { }}
+          className="sr-only"
+        />
       </div>
 
+      {/* Jumlah Stok */}
       <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
+        <label className="mb-2 block text-sm font-semibold text-zinc-700">
           Jumlah Stok
         </label>
 
         <input
           type="number"
           min="1"
+          step="1"
+          required
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           disabled={saving}
           placeholder="Masukkan jumlah stok"
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
         />
       </div>
 
+      {/* Keterangan */}
       <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
+        <label className="mb-2 block text-sm font-semibold text-zinc-700">
           Keterangan
         </label>
 
@@ -158,18 +195,10 @@ export default function AddStockForm({
           onChange={(e) => setDescription(e.target.value)}
           disabled={saving}
           placeholder="Contoh: Restock dari supplier"
-          rows={3}
-          className="w-full resize-none rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+          rows={4}
+          className="w-full resize-y rounded-lg border border-zinc-300 px-3 py-3 text-sm outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
         />
       </div>
-
-      <button
-        type="submit"
-        disabled={saving || loadingProducts}
-        className="w-full rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving ? "Menyimpan..." : "Simpan Stok"}
-      </button>
     </form>
   );
 }

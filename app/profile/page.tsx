@@ -1,25 +1,58 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import ProfileEditModal from "@/components/profile/ProfileEditModal";
+import BranchEditModal from "@/components/profile/BranchEditModal";
+import FeedbackModal from "@/components/FeedbackModal";
+import {
+  UserRound,
+  Building2,
+  Pencil,
+  ShieldCheck,
+  Phone,
+  MapPin,
+} from "lucide-react";
 
 type UserProfile = {
   name: string;
   email: string;
+  phone: string;
   role: string;
+  avatar_url: string | null;
+};
+
+type FeedbackType = "success" | "error" | "warning" | "info";
+
+type FeedbackState = {
+  open: boolean;
+  title: string;
+  message: string;
+  type: FeedbackType;
+};
+
+const initialFeedback: FeedbackState = {
+  open: false,
+  title: "",
+  message: "",
+  type: "info",
 };
 
 export default function ProfilePage() {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState("");
+
   const [savingProfile, setSavingProfile] = useState(false);
-  const [isEditing, setIsEditing] = useState(false);
-  const [isEditingBranch, setIsEditingBranch] = useState(false);
+  const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
 
   const [branchName, setBranchName] = useState("");
   const [branchAddress, setBranchAddress] = useState("");
@@ -32,374 +65,535 @@ export default function ProfilePage() {
     phone: string | null;
   } | null>(null);
 
+  const [feedback, setFeedback] =
+    useState<FeedbackState>(initialFeedback);
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
   useEffect(() => {
-    loadProfile();
-    loadBranchInfo();
-  }, []);
+    async function loadData() {
+      await Promise.all([
+        loadProfile(),
+        loadBranchInfo(),
+      ]);
+    }
+
+    void loadData();
+  }, [loadProfile, loadBranchInfo]);
 
   async function loadProfile() {
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    if (!user) return;
+      if (authError) throw authError;
 
-    const { data, error } = await supabase
-      .from("users")
-      .select("id, name, email, role")
-      .eq("id", user.id)
-      .single();
+      if (!user) {
+        showFeedback(
+          "Sesi Tidak Ditemukan",
+          "Silakan masuk kembali untuk melihat profil.",
+          "warning"
+        );
+        return;
+      }
 
-    if (error) {
-      console.error(error);
+      const { data, error } = await supabase
+        .from("users")
+        .select("id, name, email, phone, role, avatar_url")
+        .eq("id", user.id)
+        .single();
+
+      if (error) throw error;
+
+      setProfile(data);
+      setName(data.name ?? "");
+      setEmail(data.email ?? "");
+      setPhone(data.phone ?? "");
+      setAvatarUrl(data.avatar_url ?? "");
+    } catch (error) {
+      console.error("Gagal memuat profil:", error);
+
+      showFeedback(
+        "Gagal Memuat Profil",
+        "Informasi profil tidak dapat dimuat. Silakan coba lagi.",
+        "error"
+      );
+    }
+  }
+
+  async function handleSaveProfile(
+    newName: string,
+    newEmail: string,
+    newPhone: string,
+    file: File | null
+  ) {
+    if (!profile) {
+      showFeedback(
+        "Profil Tidak Ditemukan",
+        "Data profil belum tersedia. Silakan muat ulang halaman.",
+        "warning"
+      );
       return;
     }
 
-    setProfile(data);
-    setName(data.name ?? "");
-    setEmail(data.email ?? "");
-  }
+    const trimmedName = newName.trim();
+    const trimmedEmail = newEmail.trim();
+    const trimmedPhone = newPhone.trim();
 
-  async function handleSaveProfile() {
-    if (!profile) return;
+    if (!trimmedName || !trimmedEmail) {
+      showFeedback(
+        "Data Belum Lengkap",
+        "Nama dan email wajib diisi.",
+        "warning"
+      );
+      return;
+    }
 
     setSavingProfile(true);
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    if (!user) {
-      alert("User tidak ditemukan.");
-      setSavingProfile(false);
-      return;
-    }
+      if (authError) throw authError;
 
-    // Update email di Supabase Auth jika email berubah
-    if (email !== profile.email) {
-      const { error: authError } = await supabase.auth.updateUser({
-        email,
-      });
-
-      if (authError) {
-        console.error(authError);
-        alert(authError.message);
-        setSavingProfile(false);
+      if (!user) {
+        showFeedback(
+          "Sesi Tidak Ditemukan",
+          "Silakan masuk kembali sebelum mengubah profil.",
+          "warning"
+        );
         return;
       }
-    }
 
-    // Update data profil di tabel users
-    const { error: userError } = await supabase
-      .from("users")
-      .update({
-        name,
-        email,
-      })
-      .eq("id", user.id);
+      // Memperbarui email autentikasi jika berubah.
+      if (trimmedEmail !== profile.email) {
+        const { error } = await supabase.auth.updateUser({
+          email: trimmedEmail,
+        });
 
-    if (userError) {
-      console.error(userError);
-      alert(userError.message);
+        if (error) throw error;
+      }
+
+      // Gunakan foto lama jika tidak memilih foto baru.
+      let newAvatarUrl = avatarUrl;
+
+      if (file) {
+        const fileExtension = file.name.split(".").pop();
+
+        const filePath = `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from("profile-images")
+          .upload(filePath, file);
+
+        if (uploadError) {
+          throw new Error(
+            `Gagal mengunggah foto: ${uploadError.message}`
+          );
+        }
+
+        const { data: publicUrlData } = supabase.storage
+          .from("profile-images")
+          .getPublicUrl(filePath);
+
+        newAvatarUrl = publicUrlData.publicUrl;
+      }
+
+      const { error: userError } = await supabase
+        .from("users")
+        .update({
+          name: trimmedName,
+          email: trimmedEmail,
+          phone: trimmedPhone,
+          avatar_url: newAvatarUrl,
+        })
+        .eq("id", user.id);
+
+      if (userError) throw userError;
+
+      // Perbarui data pada halaman.
+      const updatedProfile: UserProfile = {
+        ...profile,
+        name: trimmedName,
+        email: trimmedEmail,
+        phone: trimmedPhone,
+        avatar_url: newAvatarUrl,
+      };
+
+      setProfile(updatedProfile);
+      setName(trimmedName);
+      setEmail(trimmedEmail);
+      setPhone(trimmedPhone);
+      setAvatarUrl(newAvatarUrl);
+
+      window.dispatchEvent(new Event("profile-updated"));
+
+      setIsProfileModalOpen(false);
+
+      showFeedback(
+        "Profil Berhasil Diperbarui",
+        "Informasi profil berhasil disimpan.",
+        "success"
+      );
+    } catch (error) {
+      console.error("Gagal menyimpan profil:", error);
+
+      showFeedback(
+        "Gagal Memperbarui Profil",
+        error instanceof Error
+          ? error.message
+          : "Terjadi kesalahan saat menyimpan profil.",
+        "error"
+      );
+    } finally {
       setSavingProfile(false);
-      return;
     }
-
-    // Ambil ulang data yang sudah tersimpan
-    const { data, error: fetchError } = await supabase
-      .from("users")
-      .select("name, email, role")
-      .eq("id", user.id)
-      .single();
-
-    if (fetchError) {
-      console.error(fetchError);
-      alert(fetchError.message);
-      setSavingProfile(false);
-      return;
-    }
-
-    setProfile(data);
-    setName(data.name);
-    setEmail(data.email);
-
-    setIsEditing(false);
-    alert("Profil berhasil diperbarui.");
-
-    setSavingProfile(false);
   }
 
   async function loadBranchInfo() {
+    try {
+      const branchId = getActiveBranchId();
+
+      if (!branchId) {
+        setBranchInfo(null);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("branches")
+        .select("name, address, phone")
+        .eq("id", branchId)
+        .single();
+
+      if (error) throw error;
+
+      setBranchInfo(data);
+      setBranchName(data.name ?? "");
+      setBranchAddress(data.address ?? "");
+      setBranchPhone(data.phone ?? "");
+    } catch (error) {
+      console.error("Gagal memuat informasi gym:", error);
+
+      showFeedback(
+        "Gagal Memuat Informasi Gym",
+        "Informasi cabang tidak dapat dimuat.",
+        "error"
+      );
+    }
+  }
+
+  async function handleSaveBranch(
+    newName: string,
+    newPhone: string,
+    newAddress: string
+  ) {
     const branchId = getActiveBranchId();
 
-    if (!branchId) return;
-
-    const { data, error } = await supabase
-      .from("branches")
-      .select("name, address, phone")
-      .eq("id", branchId)
-      .single();
-
-    if (error) {
-      console.error(error);
+    if (!branchId) {
+      showFeedback(
+        "Cabang Tidak Ditemukan",
+        "Cabang aktif tidak ditemukan. Pilih cabang terlebih dahulu.",
+        "warning"
+      );
       return;
     }
 
-    setBranchInfo(data);
-    setBranchName(data.name ?? "");
-    setBranchAddress(data.address ?? "");
-    setBranchPhone(data.phone ?? "");
+    const trimmedName = newName.trim();
+
+    if (!trimmedName) {
+      showFeedback(
+        "Nama Gym Belum Diisi",
+        "Nama gym wajib diisi.",
+        "warning"
+      );
+      return;
+    }
+
+    setSavingBranch(true);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("branches")
+        .update({
+          name: trimmedName,
+          address: newAddress.trim(),
+          phone: newPhone.trim(),
+        })
+        .eq("id", branchId);
+
+      if (updateError) throw updateError;
+
+      const { data, error: fetchError } = await supabase
+        .from("branches")
+        .select("name, address, phone")
+        .eq("id", branchId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      setBranchInfo(data);
+      setBranchName(data.name ?? "");
+      setBranchAddress(data.address ?? "");
+      setBranchPhone(data.phone ?? "");
+
+      setIsBranchModalOpen(false);
+
+      showFeedback(
+        "Informasi Gym Berhasil Diperbarui",
+        "Informasi gym pada cabang ini berhasil disimpan.",
+        "success"
+      );
+    } catch (error) {
+      console.error("Gagal menyimpan informasi gym:", error);
+
+      showFeedback(
+        "Gagal Memperbarui Informasi Gym",
+        error instanceof Error
+          ? error.message
+          : "Terjadi kesalahan saat menyimpan informasi gym.",
+        "error"
+      );
+    } finally {
+      setSavingBranch(false);
+    }
   }
-
-  const hasChanges =
-    profile &&
-    (name !== profile.name || email !== profile.email);
-
-  async function handleSaveBranch() {
-  const branchId = getActiveBranchId();
-
-  if (!branchId) {
-    alert("Cabang aktif tidak ditemukan.");
-    return;
-  }
-
-  setSavingBranch(true);
-
-  const { error: updateError } = await supabase
-    .from("branches")
-    .update({
-      name: branchName,
-      address: branchAddress,
-      phone: branchPhone,
-    })
-    .eq("id", branchId);
-
-  if (updateError) {
-    console.error(updateError);
-    alert(updateError.message);
-    setSavingBranch(false);
-    return;
-  }
-
-  // Ambil ulang data setelah berhasil di-update
-  const { data, error: fetchError } = await supabase
-    .from("branches")
-    .select("name, address, phone")
-    .eq("id", branchId)
-    .single();
-
-  if (fetchError) {
-    console.error(fetchError);
-    alert(fetchError.message);
-    setSavingBranch(false);
-    return;
-  }
-
-  setBranchInfo(data);
-  setBranchName(data.name ?? "");
-  setBranchAddress(data.address ?? "");
-  setBranchPhone(data.phone ?? "");
-
-  setIsEditingBranch(false);
-  alert("Informasi gym berhasil diperbarui.");
-
-  setSavingBranch(false);
-}
 
   return (
-    <main className="min-h-screen bg-zinc-50 px-6 py-8 md:px-10">
+    <main className="min-h-screen bg-zinc-50 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
       <div className="mx-auto max-w-5xl">
-        {/* Judul */}
-        <div>
-          <h1 className="text-2xl font-semibold text-zinc-900">
-            Profil & Pengaturan
-          </h1>
+        {/* Judul Utama */}
+        <div className="flex items-start gap-3">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+            <UserRound size={26} />
+          </div>
 
-          <p className="mt-1 text-sm text-zinc-500">
-            Kelola informasi akun dan pengaturan GymDesk.
-          </p>
-        </div>
-
-        {/* Avatar */}
-        <div className="mt-8 flex justify-center">
-          <div className="flex h-24 w-24 items-center justify-center rounded-full bg-zinc-400">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              viewBox="0 0 24 24"
-              fill="white"
-              className="h-14 w-14"
-            >
-              <path
-                fillRule="evenodd"
-                d="M12 2a5 5 0 1 0 0 10 5 5 0 0 0 0-10ZM4 20a8 8 0 1 1 16 0v1H4v-1Z"
-                clipRule="evenodd"
-              />
-            </svg>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900">
+              Profil
+            </h1>
+            <p className="mt-1 text-sm leading-5 text-zinc-500">
+              Kelola informasi akun dan informasi GymDesk.
+            </p>
           </div>
         </div>
 
-        {/* Profil Akun */}
-        <section className="mt-8 rounded-xl border border-zinc-200 bg-red p-6 md:p-8">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Profil Akun
-          </h2>
+        {/* Profil Admin */}
+        <section className="mt-7 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                <UserRound size={21} />
+              </div>
 
-          {/* Nama */}
-          <div className="md:col-span-2">
-            <div>
-              <label className="text-sm font-medium text-zinc-600">
-                Nama
-              </label>
-
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                disabled={!isEditing}
-                className="mt-2 w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-900 outline-none transition focus:border-orange-500 focus:bg-white disabled:cursor-default disabled:bg-zinc-100"
-              />
-            </div>
-
-            {/* Email */}
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-zinc-600">
-                Email
-              </label>
-
-              <input
-                type="email"
-                value={email}
-                disabled={!isEditing}
-                onChange={(e) => setEmail(e.target.value)}
-                className="mt-2 w-full rounded-lg border border-zinc-300 bg-zinc-50 p-3 text-sm text-zinc-900 outline-none transition focus:border-orange-500 focus:bg-white disabled:bg-zinc-100"
-              />
-            </div>
-
-            {/* Role */}
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-zinc-600">
-                Role
-              </label>
-
-              <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm font-medium text-zinc-900 bg-zinc-100">
-                {profile?.role ?? "-"}
+              <div>
+                <h2 className="text-lg font-bold text-zinc-900">
+                  Profil Admin
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Informasi akun yang sedang digunakan.
+                </p>
               </div>
             </div>
+
+            <button
+              type="button"
+              onClick={() => setIsProfileModalOpen(true)}
+              className="hidden shrink-0 items-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 sm:inline-flex"
+            >
+              <Pencil size={16} />
+              Edit Profil
+            </button>
           </div>
 
-          {/* Tombol */}
-          <div className="mt-6">
-            {!isEditing ? (
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col items-center gap-4 rounded-xl bg-zinc-50 px-4 py-6 text-center sm:flex-row sm:items-center sm:gap-5 sm:px-5 sm:text-left">
+              <div className="h-24 w-24 shrink-0 overflow-hidden rounded-full border-4 border-white bg-zinc-200 shadow-sm">
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt="Foto profil"
+                    className="block h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-zinc-500">
+                    {name?.charAt(0).toUpperCase() || "A"}
+                  </div>
+                )}
+              </div>
+
+              <div className="min-w-0">
+                <h3 className="break-words text-xl font-bold text-zinc-900 sm:text-2xl">
+                  {name || "- Nama"}
+                </h3>
+
+                <p className="mt-1 break-all text-sm text-zinc-600">
+                  {email || "- Email"}
+                </p>
+
+                <p className="mt-1 text-sm text-zinc-600">
+                  {phone || "- Nomor Telepon"}
+                </p>
+
+                <span className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-orange-200 bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-700">
+                  <ShieldCheck size={14} />
+                  {profile?.role || "Role belum diatur"}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-4 flex sm:hidden">
               <button
                 type="button"
-                onClick={() => setIsEditing(true)}
-                className="rounded-lg bg-orange-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-orange-600"
+                onClick={() => setIsProfileModalOpen(true)}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
               >
+                <Pencil size={16} />
                 Edit Profil
               </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSaveProfile}
-                disabled={savingProfile}
-                className="rounded-lg bg-orange-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {savingProfile ? "Menyimpan..." : "Simpan Perubahan"}
-              </button>
-            )}
+            </div>
+
+            <div className="mt-5">
+              <h3 className="mb-3 text-sm font-bold uppercase tracking-wide text-zinc-500">
+                Informasi Akun
+              </h3>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="rounded-xl border border-zinc-200 p-4">
+                  <div className="flex items-center gap-2 text-sm text-zinc-500">
+                    <ShieldCheck size={17} className="text-orange-500" />
+                    Role
+                  </div>
+                  <p className="mt-2 break-words text-base font-semibold text-zinc-900">
+                    {profile?.role || "-"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border border-zinc-200 p-4">
+                  <div className="flex items-center gap-2 text-sm text-zinc-500">
+                    <Building2 size={17} className="text-orange-500" />
+                    Cabang
+                  </div>
+                  <p className="mt-2 break-words text-base font-semibold text-zinc-900">
+                    {branchInfo?.name ?? "Belum ada cabang"}
+                  </p>
+                </div>
+              </div>
+            </div>
           </div>
         </section>
 
         {/* Informasi Gym */}
-        <section className="mt-6 rounded-xl border border-zinc-200 bg-white p-6 md:p-8">
-          <h2 className="text-lg font-semibold uppercase text-zinc-900">
-            Informasi Gym
-          </h2>
+        <section className="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b border-zinc-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+                <Building2 size={21} />
+              </div>
 
-          <div className="mt-6 grid gap-5 md:grid-cols-2">
-            {/* Nama Gym */}
-            <div>
-              <label className="text-sm font-medium text-zinc-600">
+              <div>
+                <h2 className="text-lg font-bold text-zinc-900">
+                  Informasi Gym
+                </h2>
+                <p className="mt-1 text-sm text-zinc-500">
+                  Informasi gym pada cabang yang sedang dikelola.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setIsBranchModalOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 sm:w-auto"
+            >
+              <Pencil size={16} />
+              Edit Informasi
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 sm:p-6">
+            <div className="rounded-xl border border-zinc-200 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+                <Building2 size={17} className="text-orange-500" />
                 Nama Gym
-              </label>
-
-              {isEditingBranch ? (
-                <input
-                  type="text"
-                  value={branchName}
-                  onChange={(e) => setBranchName(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:bg-white"
-                />
-              ) : (
-                <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900">
-                  {branchInfo?.name ?? "-"}
-                </div>
-              )}
+              </div>
+              <p className="mt-2 break-words text-base font-semibold text-zinc-900">
+                {branchInfo?.name ?? "-"}
+              </p>
             </div>
 
-            {/* Nomor Telepon */}
-            <div>
-              <label className="text-sm font-medium text-zinc-600">
+            <div className="rounded-xl border border-zinc-200 p-4">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+                <Phone size={17} className="text-orange-500" />
                 Nomor Telepon
-              </label>
-
-              {isEditingBranch ? (
-                <input
-                  type="text"
-                  value={branchPhone}
-                  onChange={(e) => setBranchPhone(e.target.value)}
-                  className="mt-2 w-full rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:bg-white"
-                />
-              ) : (
-                <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900">
-                  {branchInfo?.phone ?? "-"}
-                </div>
-              )}
+              </div>
+              <p className="mt-2 break-words text-base font-semibold text-zinc-900">
+                {branchInfo?.phone ?? "-"}
+              </p>
             </div>
 
-            {/* Alamat */}
-            <div className="md:col-span-2">
-              <label className="text-sm font-medium text-zinc-600">
+            <div className="rounded-xl border border-zinc-200 p-4 sm:col-span-2">
+              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
+                <MapPin size={17} className="text-orange-500" />
                 Alamat
-              </label>
-
-              {isEditingBranch ? (
-                <textarea
-                  value={branchAddress}
-                  onChange={(e) => setBranchAddress(e.target.value)}
-                  rows={3}
-                  className="mt-2 w-full resize-none rounded-lg border border-zinc-300 bg-zinc-50 px-4 py-3 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:bg-white"
-                />
-              ) : (
-                <div className="mt-2 rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm font-medium text-zinc-900">
-                  {branchInfo?.address ?? "-"}
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6">
-              {!isEditingBranch ? (
-                <button
-                  type="button"
-                  onClick={() => setIsEditingBranch(true)}
-                  className="rounded-lg bg-orange-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-orange-600"
-                >
-                  Edit Informasi
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={handleSaveBranch}
-                  disabled={savingBranch}
-                  className="rounded-lg bg-orange-500 px-5 py-3 text-sm font-medium text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {savingBranch ? "Menyimpan..." : "Simpan Perubahan"}
-                </button>
-              )}
+              </div>
+              <p className="mt-2 whitespace-pre-wrap break-words text-base font-semibold leading-6 text-zinc-900">
+                {branchInfo?.address ?? "-"}
+              </p>
             </div>
           </div>
         </section>
       </div>
+
+      <ProfileEditModal
+        open={isProfileModalOpen}
+        name={name}
+        email={email}
+        phone={phone}
+        avatarUrl={avatarUrl}
+        saving={savingProfile}
+        onClose={() => setIsProfileModalOpen(false)}
+        onSave={handleSaveProfile}
+        onFeedback={showFeedback}
+      />
+
+      <BranchEditModal
+        open={isBranchModalOpen}
+        name={branchName}
+        phone={branchPhone}
+        address={branchAddress}
+        saving={savingBranch}
+        onClose={() => setIsBranchModalOpen(false)}
+        onSave={handleSaveBranch}
+      />
+
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((current) => ({
+            ...current,
+            open: false,
+          }))
+        }
+      />
     </main>
   );
 }

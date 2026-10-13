@@ -3,20 +3,28 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-
-type TrainerMember = {
-  id: string;
-  name: string;
-};
+import TrainerFormModal from "@/components/trainers/TrainerFormModal";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import FeedbackModal from "@/components/FeedbackModal";
+import {
+  Dumbbell,
+  Phone,
+  Users,
+  ArrowUpRight
+} from "lucide-react";
 
 type Trainer = {
   id: string;
   name: string;
   phone: string;
   specialization: string;
-  status: "active" | "inavtive";
+  status: "active" | "inactive";
+  created_at: string;
   memberCount: number;
 };
+
+type FeedbackType = "success" | "error" | "warning" | "info";
 
 export default function TrainersPage() {
   const [trainers, setTrainers] = useState<Trainer[]>([]);
@@ -24,9 +32,42 @@ export default function TrainersPage() {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
   const [specialization, setSpecialization] = useState("");
+  const [pricePerSession, setPricePerSession] = useState("");
+
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 10;
 
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info",
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  function closeFeedback() {
+    setFeedback((prev) => ({
+      ...prev,
+      open: false,
+    }));
+  }
 
   useEffect(() => {
     loadTrainers();
@@ -35,42 +76,91 @@ export default function TrainersPage() {
   async function addTrainer(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    const supabase = createClient();
-    const branchId = getActiveBranchId();
-
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      return;
-    }
+    if (loading) return;
 
     const formData = new FormData(e.currentTarget);
 
-    const name = String(formData.get("name") ?? "").trim();
-    const phone = String(formData.get("phone") ?? "").trim();
-    const specialization = String(
-      formData.get("specialization") ?? ""
+    const trainerName = String(
+      formData.get("name") ?? "",
     ).trim();
 
-    if (!name) {
-      alert("Nama trainer wajib diisi.");
+    const trainerPhone = String(
+      formData.get("phone") ?? "",
+    ).trim();
+
+    const trainerSpecialization = String(
+      formData.get("specialization") ?? "",
+    ).trim();
+
+    if (!trainerName) {
+      showFeedback(
+        "Nama Belum Diisi",
+        "Nama trainer wajib diisi.",
+        "warning",
+      );
       return;
     }
 
-    const { error } = await supabase.from("trainers").insert({
-      name,
-      phone,
-      specialization,
-      branch_id: branchId,
-    });
+    const branchId = getActiveBranchId();
 
-    if (error) {
-      console.error("Gagal menambahkan trainer:", error);
-      alert("Gagal menambahkan trainer.");
+    if (!branchId) {
+      showFeedback(
+        "Cabang Belum Dipilih",
+        "Pilih cabang aktif sebelum menambahkan trainer.",
+        "warning",
+      );
       return;
     }
 
-    setIsOpen(false);
-    await loadTrainers();
+    setLoading(true);
+
+    try {
+      const supabase = createClient();
+
+      const { error } = await supabase
+        .from("trainers")
+        .insert({
+          name: trainerName,
+          phone: trainerPhone,
+          specialization: trainerSpecialization,
+          branch_id: branchId,
+        });
+
+      if (error) {
+        console.error("Gagal menambahkan trainer:", error);
+
+        showFeedback(
+          "Gagal Menambahkan Trainer",
+          "Data trainer belum berhasil disimpan. Silakan coba lagi.",
+          "error",
+        );
+        return;
+      }
+
+      setIsOpen(false);
+
+      setName("");
+      setPhone("");
+      setSpecialization("");
+
+      await loadTrainers();
+
+      showFeedback(
+        "Trainer Berhasil Ditambahkan",
+        "Data trainer berhasil disimpan.",
+        "success",
+      );
+    } catch (error) {
+      console.error("Terjadi kesalahan saat menambahkan trainer:", error);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Trainer gagal ditambahkan. Silakan coba lagi.",
+        "error",
+      );
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function loadTrainers() {
@@ -85,10 +175,15 @@ export default function TrainersPage() {
     const { data, error } = await supabase
       .from("trainers")
       .select(
-        "id, name, phone, specialization, branch_id, status"
+        "id, name, phone, specialization, branch_id, status, created_at"
       )
       .eq("branch_id", branchId)
-      .order("name");
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Gagal mengambil data trainer:", error);
+      return;
+    }
 
     const trainerIds = (data ?? []).map((trainer) => trainer.id);
 
@@ -124,198 +219,268 @@ export default function TrainersPage() {
       );
     }
 
-    const formattedTrainers = (data ?? [])
-      .map((trainer) => ({
-        id: trainer.id,
-        name: trainer.name,
-        phone: trainer.phone,
-        specialization: trainer.specialization,
-        status: trainer.status,
-        memberCount: memberCountMap.get(trainer.id) ?? 0,
-      }))
-      .sort((a, b) => {
-        if (a.status !== b.status) {
-          return a.status === "active" ? -1 : 1;
-        }
+    const formattedTrainers = (data ?? []).map((trainer) => ({
+      id: trainer.id,
+      name: trainer.name,
+      phone: trainer.phone,
+      specialization: trainer.specialization,
+      status: trainer.status,
+      created_at: trainer.created_at,
+      memberCount: memberCountMap.get(trainer.id) ?? 0,
+    }));
 
-        return a.name.localeCompare(b.name);
-      });
+    formattedTrainers.sort((a, b) => {
+      if (a.status !== b.status) {
+        return a.status === "active" ? -1 : 1;
+      }
+
+      return (
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+      );
+    });
 
     setTrainers(formattedTrainers);
   }
 
+  const filteredTrainers = trainers.filter((trainer) => {
+    const keyword = search.trim().toLowerCase();
+
+    const matchesSearch =
+      trainer.name.toLowerCase().includes(keyword) ||
+      trainer.phone.toLowerCase().includes(keyword) ||
+      trainer.specialization.toLowerCase().includes(keyword);
+
+    const matchesStatus =
+      statusFilter === "all" ||
+      trainer.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  const totalPages = Math.ceil(
+    filteredTrainers.length / ITEMS_PER_PAGE
+  );
+
+  const currentTrainers = filteredTrainers.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
+
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8 text-black">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            Trainers
-          </h1>
-
-          <p className="mt-1 text-gray-600">
-            Kelola data trainer gym
-          </p>
-        </div>
-
-        <button
-          onClick={() => setIsOpen(true)}
-          className="rounded-lg bg-black px-4 py-2 text-white"
-        >
-          + Tambah Trainer
-        </button>
-      </div>
-
-      {/* Daftar trainer */}
-      <div className="mt-8 grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-        {trainers.map((trainer) => (
-          <div
-            key={trainer.id}
-            className="rounded-xl bg-white p-6 shadow transition hover:-translate-y-1 hover:shadow-md"
-          >
-            <h2 className="text-xl font-bold">
-              {trainer.name}
-            </h2>
-
-            <p
-              className={`mt-1 text-sm font-medium ${trainer.status === "active"
-                  ? "text-green-600"
-                  : "text-zinc-500"
-                }`}
-            >
-              {trainer.status === "active"
-                ? "Aktif"
-                : "Tidak Aktif"}
-            </p>
-
-            <p className="mt-3 text-gray-600">
-              {trainer.phone}
-            </p>
-
-            <p className="mt-1 text-gray-600">
-              {trainer.specialization}
-            </p>
-
-            <div className="mt-5 rounded-lg bg-gray-50 p-4">
-              <p className="text-sm text-gray-500">
-                Member yang Ditangani
-              </p>
-
-              <p className="mt-1 text-lg font-semibold text-gray-900">
-                {trainer.memberCount} Member
-              </p>
+    <>
+      <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
+        {/* HEADER HALAMAN */}
+        <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+              <Dumbbell size={26} />
             </div>
 
-            <div className="mt-5 flex gap-2">
-              <button
-                type="button"
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+                Trainers
+              </h1>
+              <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+                Kelola data trainer dan pantau member yang ditangani.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+          >
+            <Dumbbell size={18} />
+            Tambah Trainer
+          </button>
+        </div>
+
+        {/* PENCARIAN DAN FILTER */}
+        <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="min-w-0 flex-1">
+            <Search
+              value={search}
+              onChange={(value) => {
+                setSearch(value);
+                setCurrentPage(1);
+              }}
+              placeholder="Cari nama, nomor HP, atau spesialisasi..."
+            />
+          </div>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100 sm:w-48"
+          >
+            <option value="all">Semua Status</option>
+            <option value="active">Aktif</option>
+            <option value="inactive">Tidak Aktif</option>
+          </select>
+        </div>
+
+        {/* DAFTAR TRAINER */}
+        {filteredTrainers.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-4 py-12 text-center">
+            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-500">
+              <Dumbbell size={22} />
+            </div>
+
+            <p className="text-sm font-semibold text-zinc-700">
+              {search || statusFilter !== "all"
+                ? "Trainer tidak ditemukan."
+                : "Belum ada data trainer."}
+            </p>
+
+            <p className="mt-1 text-sm text-zinc-500">
+              {search || statusFilter !== "all"
+                ? "Coba ubah kata kunci atau filter status."
+                : "Tambahkan trainer untuk mulai mengelola data pelatih gym."}
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+            {currentTrainers.map((trainer) => (
+              <div
+                key={trainer.id}
                 onClick={() => {
                   window.location.href = `/trainers/${trainer.id}`;
                 }}
-                className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
+                className="group cursor-pointer overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:border-orange-300 hover:shadow-md"
               >
-                Lihat Detail
-              </button>
-            </div>
+                {/* Header card */}
+                <div className="bg-orange-500 p-5 sm:p-6">
+                  <div className="flex items-start justify-between gap-3 border-b border-orange-400 pb-4">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-orange-600">
+                        <Dumbbell size={22} />
+                      </div>
+
+                      <div className="min-w-0">
+                        <h3 className="truncate text-base font-bold text-white">
+                          {trainer.name}
+                        </h3>
+                        <p className="mt-1 text-sm text-white/90">Trainer</p>
+                      </div>
+                    </div>
+
+                    <span
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-semibold ${trainer.status === "active"
+                        ? "bg-white text-emerald-700"
+                        : "bg-zinc-100 text-zinc-600"
+                        }`}
+                    >
+                      {trainer.status === "active" ? "Aktif" : "Tidak Aktif"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Informasi trainer */}
+                <div className="space-y-4 p-5 sm:p-6">
+
+                  {/* Member Ditangani */}
+                  <div className="rounded-xl border border-zinc-200 bg-orange-50 p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-100 text-orange-600">
+                        <Users size={20} />
+                      </div>
+
+                      <div>
+                        <p className="text-xs font-medium text-zinc-500">
+                          Member Ditangani
+                        </p>
+                        <p className="mt-1 text-lg font-bold text-zinc-900">
+                          {trainer.memberCount} member
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Nomor Telepon */}
+                  <div className="flex items-start gap-3">
+                    <Phone size={17} className="mt-0.5 shrink-0 text-zinc-400" />
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500">
+                        Nomor Telepon
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-zinc-800">
+                        {trainer.phone || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Spesialisasi */}
+                  <div className="flex items-start gap-3">
+                    <Dumbbell size={17} className="mt-0.5 shrink-0 text-zinc-400" />
+                    <div>
+                      <p className="text-xs font-medium text-zinc-500">
+                        Spesialisasi
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-zinc-800">
+                        {trainer.specialization || "-"}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Footer card */}
+                  <div className="mt-6 flex items-center justify-between gap-3 border-t border-zinc-200 pt-5">
+                    <span className="text-xs font-medium text-zinc-500 transition group-hover:text-orange-700">
+                      Lihat detail
+                    </span>
+
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 transition group-hover:bg-orange-100">
+                      <ArrowUpRight size={20} color="#EA580C" />
+                    </span>
+                  </div>
+
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        )}
 
-      {/* Modal tambah trainer */}
-      {isOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold">
-                Tambah Trainer
-              </h2>
-
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-2xl text-gray-500"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={addTrainer}
-              className="space-y-4"
-            >
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Nama Trainer
-                </label>
-
-                <input
-                  type="text"
-                  name="name"
-                  value={name}
-                  onChange={(e) =>
-                    setName(e.target.value)
-                  }
-                  required
-                  className="w-full rounded-lg border p-3"
-                  placeholder="Masukkan nama trainer"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Nomor HP
-                </label>
-
-                <input
-                  type="text"
-                  name="phone"
-                  value={phone}
-                  onChange={(e) =>
-                    setPhone(e.target.value)
-                  }
-                  required
-                  className="w-full rounded-lg border p-3"
-                  placeholder="08xxxxxxxxxx"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Spesialisasi
-                </label>
-
-                <input
-                  type="text"
-                  name="specialization"
-                  value={specialization}
-                  onChange={(e) =>
-                    setSpecialization(e.target.value)
-                  }
-                  required
-                  className="w-full rounded-lg border p-3"
-                  placeholder="Contoh: Personal Trainer"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-lg bg-black px-4 py-3 text-white"
-              >
-                {loading
-                  ? "Menyimpan..."
-                  : "Simpan Trainer"}
-              </button>
-            </form>
-
-            <button
-              onClick={() => setIsOpen(false)}
-              className="mt-3 w-full rounded-lg border px-4 py-3"
-            >
-              Batal
-            </button>
-          </div>
+        {/* PAGINATION */}
+        <div className="mt-6">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={filteredTrainers.length}
+            itemsPerPage={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+          />
         </div>
-      )}
-    </main>
+
+        {/* MODAL TAMBAH TRAINER */}
+        {isOpen && (
+          <TrainerFormModal
+            name={name}
+            phone={phone}
+            specialization={specialization}
+            loading={loading}
+            onNameChange={setName}
+            onPhoneChange={setPhone}
+            onSpecializationChange={setSpecialization}
+            pricePerSession={pricePerSession}
+            onPricePerSessionChange={setPricePerSession}
+            onSubmit={addTrainer}
+            onClose={() => setIsOpen(false)}
+          />
+        )}
+      </main>
+
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={closeFeedback}
+      />
+    </>
   );
 }

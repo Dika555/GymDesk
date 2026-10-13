@@ -5,27 +5,46 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import AddTransactionButton from "@/components/AddTransactionButton";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import FeedbackModal from "@/components/FeedbackModal";
+import {
+  ReceiptText,
+  ArrowUpRight,
+} from "lucide-react";
 
-type Transaction = {
-  id: string;
-  transaction_type: string;
-  payment_method: string;
-  total_amount: number;
-  status: string;
-  transaction_date: string;
-  notes: string | null;
-  customer_name: string | null;
-  members: {
+type TransactionItem = {
+  product_id: string | null;
+  quantity: number;
+  unit_price: number;
+  products: {
     name: string;
   } | null;
 };
+
+  type Transaction = {
+    id: string;
+    transaction_type: string;
+    payment_method: string;
+    total_amount: number;
+    status: string;
+    transaction_date: string;
+    created_at: string;
+    notes: string | null;
+    customer_name: string | null;
+    members: {
+      name: string;
+    } | null;
+    transaction_items: TransactionItem[];
+  };
 
 const ITEMS_PER_PAGE = 10;
 
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [search, setSearch] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -45,42 +64,69 @@ export default function TransactionsPage() {
     const { data, error } = await supabase
       .from("transactions")
       .select(`
-  id,
-  transaction_type,
-  payment_method,
-  total_amount,
-  status,
-  transaction_date,
-  notes,
-  customer_name,
-  members!transactions_member_id_fkey (
-    id,
-    name
-  )
-`)
-
+        id,
+        transaction_type,
+        payment_method,
+        total_amount,
+        status,
+        transaction_date,
+        created_at,
+        notes,
+        customer_name,
+        members!transactions_member_id_fkey (
+          id,
+          name
+        ),
+        transaction_items (
+          product_id,
+          quantity,
+          unit_price,
+          products (
+            name
+          )
+        )
+      `)
       .eq("branch_id", branchId)
-      .order("transaction_date", {
+      .order("created_at", {
         ascending: false,
       });
 
     if (error) {
-      console.error(error);
+      console.error(
+        "Gagal mengambil transaksi:",
+        error,
+      );
+
       setLoading(false);
       return;
     }
 
-    console.log(
-  "TRANSAKSI PERTAMA:",
-  JSON.stringify(data?.[0], null, 2)
-);
-
     setTransactions(
-      (data ?? []).map((transaction) => ({
-        ...transaction,
-        members: transaction.members?.[0] ?? null,
-      }))
+      (data ?? []).map((transaction) => {
+        const memberData = transaction.members;
+
+        const member = Array.isArray(memberData)
+          ? memberData[0] ?? null
+          : memberData ?? null;
+
+        return {
+          ...transaction,
+
+          members: member,
+
+          transaction_items:
+            (transaction.transaction_items ?? []).map(
+              (item) => ({
+                ...item,
+                products: Array.isArray(item.products)
+                  ? item.products[0] ?? null
+                  : item.products ?? null,
+              }),
+            ),
+        };
+      }),
     );
+
 
     setLoading(false);
   }
@@ -91,41 +137,7 @@ export default function TransactionsPage() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, typeFilter]);
-
-  const filteredTransactions = transactions.filter(
-    (transaction) => {
-      const memberName =
-        transaction.members?.name?.toLowerCase() ?? "";
-
-      const keyword = search.toLowerCase();
-
-      const matchesSearch =
-        memberName.includes(keyword) ||
-        transaction.payment_method
-          .toLowerCase()
-          .includes(keyword);
-
-      const matchesType =
-        typeFilter === "all" ||
-        transaction.transaction_type === typeFilter;
-
-      return matchesSearch && matchesType;
-    },
-  );
-
-  const totalPages = Math.ceil(
-    filteredTransactions.length / ITEMS_PER_PAGE,
-  );
-
-  const startIndex =
-    (currentPage - 1) * ITEMS_PER_PAGE;
-
-  const currentTransactions =
-    filteredTransactions.slice(
-      startIndex,
-      startIndex + ITEMS_PER_PAGE,
-    );
+  }, [search, paymentFilter, statusFilter]);
 
   function formatDate(date: string) {
     return new Date(date).toLocaleDateString(
@@ -153,6 +165,9 @@ export default function TransactionsPage() {
       case "product":
         return "Produk";
 
+      case "trainer_package":
+        return "Paket Trainer";
+
       default:
         return "Lainnya";
     }
@@ -174,74 +189,198 @@ export default function TransactionsPage() {
     }
   }
 
-  return (
-    <main className="min-h-screen bg-gray-100 p-8 text-black">
-      <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            Transactions
-          </h1>
+  function formatStatus(status: string) {
+    switch (status) {
+      case "completed":
+        return "Selesai";
 
-          <p className="mt-1 text-gray-500">
-            Riwayat seluruh transaksi GymDesk.
-          </p>
+      case "pending":
+        return "Menunggu";
+
+      case "cancelled":
+        return "Dibatalkan";
+
+      default:
+        return status;
+    }
+  }
+
+  function getPurchaseNames(
+    transaction: Transaction,
+  ) {
+    const names = transaction.transaction_items
+      .map(
+        (item) =>
+          item.products?.name ?? "",
+      )
+      .filter(Boolean);
+
+    return names.join(" ");
+  }
+
+  const filteredTransactions =
+    transactions.filter(
+      (transaction) => {
+        const keyword =
+          search.trim().toLowerCase();
+
+        const memberName =
+          transaction.members?.name?.toLowerCase() ??
+          "";
+
+        const customerName =
+          transaction.customer_name?.toLowerCase() ??
+          "";
+
+        const formattedDate = formatDate(
+          transaction.transaction_date,
+        ).toLowerCase();
+
+        const purchaseNames = getPurchaseNames(
+          transaction,
+        ).toLowerCase();
+
+        const matchesSearch =
+          memberName.includes(keyword) ||
+          customerName.includes(keyword) ||
+          formattedDate.includes(keyword) ||
+          purchaseNames.includes(keyword);
+
+        const matchesPayment =
+          paymentFilter === "all" ||
+          transaction.payment_method === paymentFilter;
+
+        const matchesStatus =
+          statusFilter === "all" ||
+          transaction.status === statusFilter;
+
+        return (
+          matchesSearch &&
+          matchesPayment &&
+          matchesStatus
+        );
+      },
+    );
+
+  const totalPages = Math.ceil(
+    filteredTransactions.length /
+    ITEMS_PER_PAGE,
+  );
+
+  const startIndex =
+    (currentPage - 1) *
+    ITEMS_PER_PAGE;
+
+  const currentTransactions =
+    filteredTransactions.slice(
+      startIndex,
+      startIndex + ITEMS_PER_PAGE,
+    );
+
+  type FeedbackType = "success" | "error" | "warning" | "info";
+
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  return (
+
+    <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+            <ReceiptText size={26} />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+              Transaksi
+            </h1>
+
+            <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+              Catat transaksi dan lihat riwayat seluruh transaksi GymDesk.
+            </p>
+          </div>
         </div>
 
         <AddTransactionButton
-          onSuccess={getTransactions}
+          onSuccess={() => {
+            void getTransactions();
+
+            showFeedback(
+              "Transaksi Berhasil Disimpan",
+              "Data transaksi berhasil disimpan.",
+              "success"
+            );
+          }}
         />
       </div>
-      <div className="rounded-xl bg-white p-6 shadow-sm">
-        {/* Search & Filter */}
-        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setCurrentPage(1);
-            }}
-            placeholder="Cari member atau metode pembayaran..."
-            className="w-full rounded-lg border border-gray-300 px-4 py-2 outline-none focus:border-orange-500 md:max-w-md"
-          />
 
-          <select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="rounded-lg border border-gray-300 px-4 py-2 outline-none focus:border-orange-500"
-          >
-            <option value="all">
-              Semua Transaksi
-            </option>
 
-            <option value="registration">
-              Pendaftaran
-            </option>
+      {/* Search & Filter */}
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_220px_200px]">
+        <Search
+          value={search}
+          onChange={(value) => {
+            setSearch(value);
+            setCurrentPage(1);
+          }}
+          placeholder="Cari tanggal atau nama pelanggan..."
+        />
 
-            <option value="membership">
-              Membership
-            </option>
+        {/* Filter Pembayaran */}
+        <select
+          value={paymentFilter}
+          onChange={(e) => {
+            setPaymentFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-700 outline-none focus:border-orange-500"
+        >
+          <option value="all">Semua Pembayaran</option>
+          <option value="cash">Cash</option>
+          <option value="qris">QRIS</option>
+          <option value="transfer">Transfer</option>
+        </select>
 
-            <option value="product">
-              Produk
-            </option>
+        {/* Filter Status */}
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="h-11 w-full rounded-xl border border-zinc-200 bg-white px-4 text-sm text-zinc-700 outline-none focus:border-orange-500"
+        >
+          <option value="all">Semua Status</option>
+          <option value="completed">Selesai</option>
+          <option value="cancelled">Dibatalkan</option>
+        </select>
+      </div>
 
-            <option value="other">
-              Lainnya
-            </option>
-          </select>
-        </div>
-
+      <div className="rounded-2xl border border-zinc-200 bg-white">
         {/* Loading */}
         {loading ? (
           <p className="py-10 text-center text-gray-500">
             Memuat transaksi...
           </p>
         ) : filteredTransactions.length === 0 ? (
-          /* Empty State */
           <p className="py-10 text-center text-gray-500">
             Tidak ada transaksi ditemukan.
           </p>
@@ -249,34 +388,32 @@ export default function TransactionsPage() {
           <>
             {/* Table */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[800px]">
+              <table className="w-full min-w-[900px]">
+
                 <thead>
-                  <tr className="border-b text-left text-sm text-gray-500">
-                    <th className="px-4 py-3">
+                  <tr className="border-b-2 border-zinc-200 bg-zinc-100 text-left">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                      No
+                    </th>
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Tanggal
                     </th>
-
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Nama
                     </th>
-
-                    <th className="px-4 py-3">
-                      Tipe
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                      Tipe Pembelian
                     </th>
-
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Pembayaran
                     </th>
-
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Total
                     </th>
-
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Status
                     </th>
-
-                    <th className="px-4 py-3">
+                    <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
                       Aksi
                     </th>
                   </tr>
@@ -284,59 +421,67 @@ export default function TransactionsPage() {
 
                 <tbody>
                   {currentTransactions.map(
-                    (transaction) => (
+                    (transaction, index) => (
                       <tr
                         key={transaction.id}
-                        className="border-b last:border-0 hover:bg-gray-50"
+                        className="border-b border-zinc-100 last:border-0 hover:bg-zinc-50"
                       >
-                        <td className="px-4 py-4 text-sm">
+                        <td className="whitespace-nowrap px-4 py-4 text-sm text-zinc-700">
+                          {startIndex +
+                            index +
+                            1}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-4 text-sm text-zinc-700">
                           {formatDate(
                             transaction.transaction_date,
                           )}
                         </td>
 
-                        <td className="px-4 py-4 font-medium">
+                        <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-zinc-900">
                           {transaction.members?.name ??
                             transaction.customer_name ??
                             "-"}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-4 text-sm text-zinc-700">
                           {formatType(
                             transaction.transaction_type,
                           )}
                         </td>
 
-                        <td className="px-4 py-4">
+                        <td className="whitespace-nowrap px-4 py-4 text-sm text-zinc-700">
                           {formatPaymentMethod(
                             transaction.payment_method,
                           )}
                         </td>
 
-                        <td className="px-4 py-4 font-medium">
+                        <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-zinc-900">
                           {formatCurrency(
                             transaction.total_amount,
                           )}
                         </td>
 
                         <td className="px-4 py-4">
+
                           <span
-                            className={
-                              transaction.status ===
-                                "completed"
-                                ? "rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-700"
-                                : "rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600"
-                            }
+                            className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-semibold ${transaction.status === "completed"
+                              ? "border-green-200 bg-green-50 text-green-700"
+                              : transaction.status === "cancelled"
+                                ? "border-red-200 bg-red-50 text-red-700"
+                                : "border-zinc-200 bg-zinc-100 text-zinc-600"
+                              }`}
                           >
-                            {transaction.status}
+                            {formatStatus(transaction.status)}
                           </span>
                         </td>
 
                         <td className="px-4 py-4">
                           <Link
                             href={`/transactions/${transaction.id}`}
-                            className="text-sm font-medium text-orange-500 hover:text-orange-600"
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-orange-200 bg-white px-2 py-1.5 text-sm font-medium text-orange-700 transition-colors hover:bg-orange-100"
                           >
+                            <ArrowUpRight size={16} />
                             Detail
                           </Link>
                         </td>
@@ -346,61 +491,29 @@ export default function TransactionsPage() {
                 </tbody>
               </table>
             </div>
-
-            {/* Pagination */}
-            <div className="mt-6 flex items-center justify-between">
-              <p className="text-sm text-gray-500">
-                Menampilkan{" "}
-                {startIndex + 1} -{" "}
-                {Math.min(
-                  startIndex + ITEMS_PER_PAGE,
-                  filteredTransactions.length,
-                )}{" "}
-                dari{" "}
-                {filteredTransactions.length}{" "}
-                transaksi
-              </p>
-
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentPage((page) =>
-                      Math.max(page - 1, 1),
-                    )
-                  }
-                  disabled={currentPage === 1}
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Sebelumnya
-                </button>
-
-                <span className="px-2 text-sm text-gray-600">
-                  {currentPage} / {totalPages}
-                </span>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentPage((page) =>
-                      Math.min(
-                        page + 1,
-                        totalPages,
-                      ),
-                    )
-                  }
-                  disabled={
-                    currentPage === totalPages
-                  }
-                  className="rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Berikutnya
-                </button>
-              </div>
-            </div>
           </>
         )}
       </div>
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredTransactions.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+      />
+
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
     </main>
   );
 }

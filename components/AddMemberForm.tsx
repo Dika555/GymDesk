@@ -7,18 +7,28 @@ import { getActiveBranchId } from "@/lib/branch";
 type Member = {
   id: string;
   name: string;
-  phone: string;
-  membership: string;
-  status: string;
+  phone: string | null;
+  email: string | null;
+  gender: string | null;
+  address: string | null;
+  membership: string | null;
 };
+
+type FeedbackType = "success" | "error" | "warning" | "info";
 
 type Props = {
   onSuccess: () => void;
+  onFeedback: (
+    title: string,
+    message: string,
+    type: FeedbackType
+  ) => void;
   member?: Member;
 };
 
 export default function AddMemberForm({
   onSuccess,
+  onFeedback,
   member,
 }: Props) {
   const [name, setName] = useState("");
@@ -29,15 +39,17 @@ export default function AddMemberForm({
 
   const [registrationFee, setRegistrationFee] = useState("50000");
   const [paymentMethod, setPaymentMethod] = useState("cash");
-
   const [saving, setSaving] = useState(false);
 
   const isEditing = Boolean(member);
 
   useEffect(() => {
     if (member) {
-      setName(member.name);
-      setPhone(member.phone);
+      setName(member.name ?? "");
+      setPhone(member.phone ?? "");
+      setEmail(member.email ?? "");
+      setGender(member.gender ?? "");
+      setAddress(member.address ?? "");
     } else {
       setName("");
       setPhone("");
@@ -49,123 +61,125 @@ export default function AddMemberForm({
     }
   }, [member]);
 
-  async function handleSubmit(
-    e: React.FormEvent<HTMLFormElement>,
-  ) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!name.trim()) {
-      alert("Nama member wajib diisi.");
+      onFeedback(
+        "Data Belum Lengkap",
+        "Nama member wajib diisi.",
+        "warning"
+      );
       return;
     }
 
     if (!phone.trim()) {
-      alert("Nomor HP wajib diisi.");
+      onFeedback(
+        "Data Belum Lengkap",
+        "Nomor HP wajib diisi.",
+        "warning"
+      );
       return;
     }
 
-    setSaving(true);
-
-    const supabase = createClient();
-
-    // =========================
-    // EDIT MEMBER
-    // =========================
-    if (isEditing && member) {
-      const branchId = getActiveBranchId();
-
-      if (!branchId) {
-        alert("Cabang aktif belum dipilih.");
-        setSaving(false);
-        return;
-      }
-
-      const { error } = await supabase
-        .from("members")
-        .update({
-          name: name.trim(),
-          phone: phone.trim(),
-        })
-        .eq("id", member.id)
-        .eq("branch_id", branchId);
-
-      if (error) {
-        console.error(error);
-        alert("Gagal mengubah data member.");
-        setSaving(false);
-        return;
-      }
-
-      alert("Data member berhasil diubah.");
-
-      setSaving(false);
-      onSuccess();
-
-      return;
-    }
-
-    // =========================
-    // TAMBAH MEMBER
-    // =========================
-
-    if (!registrationFee || Number(registrationFee) < 0) {
-      alert("Biaya pendaftaran tidak valid.");
-      setSaving(false);
+    if (!isEditing && (!registrationFee || Number(registrationFee) < 0)) {
+      onFeedback(
+        "Biaya Tidak Valid",
+        "Biaya pendaftaran harus berupa angka nol atau lebih.",
+        "warning"
+      );
       return;
     }
 
     const branchId = getActiveBranchId();
 
     if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      setSaving(false);
+      onFeedback(
+        "Cabang Belum Dipilih",
+        "Silakan pilih cabang aktif terlebih dahulu.",
+        "warning"
+      );
       return;
     }
 
-    const { error } = await supabase.rpc(
-      "create_member_registration",
-      {
-        p_branch_id: branchId,
-        p_name: name.trim(),
-        p_phone: phone.trim(),
-        p_email: email.trim(),
-        p_gender: gender,
-        p_address: address.trim(),
-        p_registration_fee: Number(registrationFee),
-        p_payment_method: paymentMethod,
-      },
-    );
+    setSaving(true);
 
-    if (error) {
-      console.error(error);
-      alert(error.message);
+    try {
+      const supabase = createClient();
+
+      if (isEditing && member) {
+        const { error } = await supabase
+          .from("members")
+          .update({
+            name: name.trim(),
+            phone: phone.trim(),
+            email: email.trim() || null,
+            gender: gender || null,
+            address: address.trim() || null,
+          })
+          .eq("id", member.id)
+          .eq("branch_id", branchId);
+
+        if (error) {
+          console.error("Gagal mengubah data member:", error);
+
+          onFeedback(
+            "Gagal Menyimpan",
+            "Data member gagal diubah. Silakan coba lagi.",
+            "error"
+          );
+          return;
+        }
+
+        onSuccess();
+        return;
+      }
+
+      const { error } = await supabase.rpc(
+        "create_member_registration",
+        {
+          p_branch_id: branchId,
+          p_name: name.trim(),
+          p_phone: phone.trim(),
+          p_email: email.trim(),
+          p_gender: gender,
+          p_address: address.trim(),
+          p_registration_fee: Number(registrationFee),
+          p_payment_method: paymentMethod,
+        }
+      );
+
+      if (error) {
+        console.error("Gagal mendaftarkan member:", error);
+
+        onFeedback(
+          "Gagal Mendaftarkan Member",
+          error.message || "Terjadi kesalahan saat mendaftarkan member.",
+          "error"
+        );
+        return;
+      }
+
+      onSuccess();
+    } catch (error) {
+      console.error("Terjadi kesalahan:", error);
+
+      onFeedback(
+        "Terjadi Kesalahan",
+        "Terjadi kesalahan saat menyimpan data member. Silakan coba lagi.",
+        "error"
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    alert("Member berhasil didaftarkan.");
-
-    setName("");
-    setPhone("");
-    setEmail("");
-    setGender("");
-    setAddress("");
-    setRegistrationFee("50000");
-    setPaymentMethod("cash");
-
-    setSaving(false);
-
-    onSuccess();
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      {/* Nama */}
+    <form id="member-form" onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="mb-1 block text-sm font-medium text-zinc-700">
           Nama
         </label>
-
         <input
           type="text"
           value={name}
@@ -176,12 +190,10 @@ export default function AddMemberForm({
         />
       </div>
 
-      {/* Nomor HP */}
       <div>
         <label className="mb-1 block text-sm font-medium text-zinc-700">
           No. HP
         </label>
-
         <input
           type="text"
           value={phone}
@@ -192,12 +204,10 @@ export default function AddMemberForm({
         />
       </div>
 
-      {/* Email */}
       <div>
         <label className="mb-1 block text-sm font-medium text-zinc-700">
           Email
         </label>
-
         <input
           type="email"
           value={email}
@@ -207,12 +217,10 @@ export default function AddMemberForm({
         />
       </div>
 
-      {/* Gender */}
       <div>
         <label className="mb-1 block text-sm font-medium text-zinc-700">
           Jenis Kelamin
         </label>
-
         <select
           value={gender}
           onChange={(e) => setGender(e.target.value)}
@@ -224,12 +232,10 @@ export default function AddMemberForm({
         </select>
       </div>
 
-      {/* Alamat */}
       <div>
         <label className="mb-1 block text-sm font-medium text-zinc-700">
           Alamat
         </label>
-
         <textarea
           value={address}
           onChange={(e) => setAddress(e.target.value)}
@@ -239,72 +245,47 @@ export default function AddMemberForm({
         />
       </div>
 
-      {/* Pendaftaran */}
       {!isEditing && (
-        <>
-          <div className="border-t border-zinc-200 pt-4">
-            <p className="mb-3 text-sm font-semibold text-zinc-800">
-              Pendaftaran Member
-            </p>
+        <div className="border-t border-zinc-200 pt-4">
+          <p className="mb-3 text-sm font-semibold text-zinc-800">
+            Pendaftaran Member
+          </p>
 
-            <div className="space-y-4">
-              {/* Biaya */}
-              <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">
-                  Biaya Pendaftaran
-                </label>
+          <div className="space-y-4">
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Biaya Pendaftaran
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={registrationFee}
+                onChange={(e) => setRegistrationFee(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+                required
+              />
+              <p className="mt-1 text-xs text-zinc-500">
+                Nilai Rp50.000 sementara digunakan sebagai contoh.
+              </p>
+            </div>
 
-                <input
-                  type="number"
-                  min="0"
-                  value={registrationFee}
-                  onChange={(e) =>
-                    setRegistrationFee(e.target.value)
-                  }
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-                  required
-                />
-
-                <p className="mt-1 text-xs text-zinc-500">
-                  Nilai Rp50.000 sementara digunakan sebagai contoh.
-                </p>
-              </div>
-
-              {/* Pembayaran */}
-              <div>
-                <label className="mb-1 block text-sm font-medium text-zinc-700">
-                  Metode Pembayaran
-                </label>
-
-                <select
-                  value={paymentMethod}
-                  onChange={(e) =>
-                    setPaymentMethod(e.target.value)
-                  }
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-                >
-                  <option value="cash">Cash</option>
-                  <option value="qris">QRIS</option>
-                  <option value="transfer">Transfer</option>
-                </select>
-              </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium text-zinc-700">
+                Metode Pembayaran
+              </label>
+              <select
+                value={paymentMethod}
+                onChange={(e) => setPaymentMethod(e.target.value)}
+                className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+              >
+                <option value="cash">Cash</option>
+                <option value="qris">QRIS</option>
+                <option value="transfer">Transfer</option>
+              </select>
             </div>
           </div>
-        </>
+        </div>
       )}
-
-      {/* Tombol */}
-      <button
-        type="submit"
-        disabled={saving}
-        className="w-full rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving
-          ? "Menyimpan..."
-          : isEditing
-            ? "Simpan Perubahan"
-            : "Daftarkan Member"}
-      </button>
     </form>
   );
 }

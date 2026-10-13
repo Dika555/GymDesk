@@ -1,4 +1,4 @@
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser } from "@/lib/supabase/auth";
 
 export async function GET() {
   const user = await getCurrentUser();

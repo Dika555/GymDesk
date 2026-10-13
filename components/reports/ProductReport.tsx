@@ -1,99 +1,176 @@
 "use client";
 
+import { useEffect, useState } from "react";
+import Pagination from "@/components/Pagination";
+import {
+  Package
+} from "lucide-react";
+
 type ProductReportItem = {
   id: string;
   name: string;
   category: string;
   price: number;
+  openingStock: number | null;
   stockIn: number;
   stockOut: number;
-  currentStock: number;
+  endingStock: number | null;
+  historyComplete: boolean;
 };
 
-type Props = {
+type ProductReportProps = {
   products: ProductReportItem[];
 };
 
-export default function ProductReport({ products }: Props) {
-  function formatCurrency(amount: number) {
-    return `Rp ${amount.toLocaleString("id-ID")}`;
+const ITEMS_PER_PAGE = 20;
+
+export default function ProductReport({
+  products,
+}: ProductReportProps) {
+  const [currentPage, setCurrentPage] = useState(1);
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(products.length / ITEMS_PER_PAGE)
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [products]);
+
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+
+  const displayedProducts = products.slice(
+    startIndex,
+    startIndex + ITEMS_PER_PAGE
+  );
+
+  function formatStock(value: number | null) {
+    return value === null
+      ? "Riwayat belum lengkap"
+      : value.toLocaleString("id-ID");
   }
 
   return (
-    <section className="mt-6 rounded-xl border border-zinc-200 bg-white p-5">
-      <div className="mb-5">
-        <h2 className="text-lg font-semibold text-zinc-900">
-          Data Produk & Stok
-        </h2>
+    <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6">
+      <div className="flex items-center gap-4">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-orange-100 text-orange-600">
+          <Package size={22} />
+        </div>
 
-        <p className="mt-1 text-sm text-zinc-500">
-          Pergerakan stok produk berdasarkan periode yang dipilih.
-        </p>
+        <div>
+          <h2 className="text-lg font-bold tracking-tight text-zinc-900 sm:text-xl">
+            Data Produk & Stok
+          </h2>
+
+          <p className="mt-1 text-sm text-zinc-500">
+            Pergerakan stok berdasarkan periode laporan.
+          </p>
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[900px] text-left text-sm">
-          <thead>
-            <tr className="border-b border-zinc-200 text-zinc-500">
-              <th className="px-4 py-3 font-medium">No</th>
-              <th className="px-4 py-3 font-medium">Produk</th>
-              <th className="px-4 py-3 font-medium">Kategori</th>
-              <th className="px-4 py-3 font-medium">Harga</th>
-              <th className="px-4 py-3 font-medium">Stok Masuk</th>
-              <th className="px-4 py-3 font-medium">Stok Keluar</th>
-              <th className="px-4 py-3 font-medium">Stok Akhir</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {products.length === 0 ? (
-              <tr>
-                <td
-                  colSpan={7}
-                  className="px-4 py-8 text-center text-zinc-500"
-                >
-                  Tidak ada data produk pada periode ini.
-                </td>
+      <div className="mt-5 overflow-hidden rounded-xl border border-zinc-200">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[1000px]">
+            <thead className="bg-zinc-50">
+              <tr className="border-b border-zinc-200 text-left">
+                {[
+                  "No.",
+                  "Produk",
+                  "Kategori",
+                  "Harga",
+                  "Stok Awal",
+                  "Stok Masuk",
+                  "Stok Keluar",
+                  "Stok Akhir",
+                ].map((heading) => (
+                  <th
+                    key={heading}
+                    className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500"
+                  >
+                    {heading}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              products.map((product, index) => (
-                <tr
-                  key={product.id}
-                  className="border-b border-zinc-100"
-                >
-                  <td className="px-4 py-3 text-zinc-500">
-                    {index + 1}
-                  </td>
+            </thead>
 
-                  <td className="px-4 py-3 font-medium text-zinc-900">
-                    {product.name}
-                  </td>
+            <tbody className="divide-y divide-zinc-100">
+              {displayedProducts.length > 0 ? (
+                displayedProducts.map((product, index) => (
+                  <tr
+                    key={product.id}
+                    className="transition-colors hover:bg-zinc-50"
+                  >
+                    <td className="px-4 py-3.5 text-sm text-zinc-500">
+                      {startIndex + index + 1}
+                    </td>
 
-                  <td className="px-4 py-3 text-zinc-700">
-                    {product.category || "-"}
-                  </td>
+                    <td className="px-4 py-3.5 text-sm font-semibold text-zinc-900">
+                      {product.name}
+                    </td>
 
-                  <td className="px-4 py-3 text-zinc-700">
-                    {formatCurrency(product.price)}
-                  </td>
+                    <td className="px-4 py-3.5 text-sm text-zinc-600">
+                      {product.category || "-"}
+                    </td>
 
-                  <td className="px-4 py-3 text-zinc-700">
-                    {product.stockIn}
-                  </td>
+                    <td className="px-4 py-3.5 text-sm text-zinc-600">
+                      {product.price.toLocaleString("id-ID", {
+                        style: "currency",
+                        currency: "IDR",
+                        maximumFractionDigits: 0,
+                      })}
+                    </td>
 
-                  <td className="px-4 py-3 text-zinc-700">
-                    {product.stockOut}
-                  </td>
+                    <td className="px-4 py-3.5 text-sm text-zinc-600">
+                      {formatStock(product.openingStock)}
+                    </td>
 
-                  <td className="px-4 py-3 font-medium text-zinc-900">
-                    {product.currentStock}
+                    <td className="px-4 py-3.5 text-sm text-green-700">
+                      {product.stockIn.toLocaleString("id-ID")}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-sm text-red-600">
+                      {product.stockOut.toLocaleString("id-ID")}
+                    </td>
+
+                    <td className="px-4 py-3.5 text-sm font-semibold text-zinc-900">
+                      {formatStock(product.endingStock)}
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={8}
+                    className="px-4 py-10 text-center text-sm text-zinc-500"
+                  >
+                    Tidak ada data produk pada periode ini.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </section>
+
+      {products.length > 0 && (
+        <div className="mt-4">
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            totalItems={products.length}
+            itemsPerPage={ITEMS_PER_PAGE}
+            onPageChange={setCurrentPage}
+          />
+        </div>
+      )}
+
+      {products.some((product) => !product.historyComplete) && (
+        <p className="mt-4 text-sm text-amber-700">
+          Sebagian produk belum memiliki riwayat stok yang cukup untuk
+          menghitung stok awal dan akhir secara akurat.
+        </p>
+      )}
+    </div>
   );
 }

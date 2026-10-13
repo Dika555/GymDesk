@@ -2,6 +2,10 @@
 
 import { useState } from "react";
 import AddMemberMembershipModal from "@/components/AddMemberMembershipModal";
+import FeedbackModal from "@/components/FeedbackModal";
+import { useRouter } from "next/navigation";
+
+type FeedbackType = "success" | "error" | "warning" | "info";
 
 type Props = {
   memberId: string;
@@ -14,12 +18,47 @@ export default function AddMemberMembershipButton({
 }: Props) {
   const [isOpen, setIsOpen] = useState(false);
 
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  function handleSuccess() {
+    setIsOpen(false);
+
+    // Muat ulang data halaman Detail Member
+    router.refresh();
+
+    showFeedback(
+      "Membership Berhasil Ditambahkan",
+      "Membership berhasil ditambahkan dan pembayaran berhasil dicatat.",
+      "success"
+    );
+  }
+
+  const router = useRouter();
+
   return (
     <>
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600"
+        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
       >
         + Tambah Membership
       </button>
@@ -29,8 +68,23 @@ export default function AddMemberMembershipButton({
           memberId={memberId}
           branchId={branchId}
           onClose={() => setIsOpen(false)}
+          onSuccess={handleSuccess}
+          onFeedback={showFeedback}
         />
       )}
+
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
     </>
   );
 }

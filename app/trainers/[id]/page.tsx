@@ -3,57 +3,27 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import TrainerProfileSection from "@/components/trainers/[id]/TrainerProfileSection";
+import TrainerMembersSection from "@/components/trainers/[id]/TrainerMembersSection";
+import TrainerPackagesSection from "@/components/trainers/[id]/TrainerPackagesSection";
+import TrainerSessionsSection from "@/components/trainers/[id]/TrainerSessionsSection";
+import TrainerPackageMembersSection from "@/components/trainers/[id]/TrainerPackageMembersSection";
+import TrainerPackageModal from "@/components/trainers/[id]/TrainerPackageModal";
+import TrainerSessionModal from "@/components/trainers/[id]/TrainerSessionModal";
+import TrainerPurchaseModal from "@/components/trainers/[id]/TrainerPurchaseModal";
+import TrainerEditModal from "@/components/trainers/[id]/TrainerEditModal";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import FeedbackModal from "@/components/FeedbackModal";
+import type {
+    Trainer,
+    TrainerPackage,
+    TrainerMember,
+    AvailableMember,
+    TrainerPackageMember,
+    TrainerSession,
+} from "@/components/trainers/[id]/types";
 
-type Trainer = {
-    id: string;
-    name: string;
-    phone: string;
-    specialization: string;
-    price_per_session: number;
-    status: string;
-};
-
-type TrainerPackage = {
-    id: string;
-    name: string;
-    session_count: number;
-    price: number;
-    status: string;
-};
-
-type TrainerMember = {
-    id: string;
-    name: string;
-    remaining_sessions: number;
-    has_active_package: boolean;
-};
-
-type AvailableMember = {
-    id: string;
-    name: string;
-};
-
-type TrainerPackageMember = {
-    id: string;
-    member_id: string;
-    trainer_package_id: string;
-    total_sessions: number;
-    remaining_sessions: number;
-    purchase_date: string;
-    status: string;
-    member_name: string;
-    package_name: string;
-};
-
-type TrainerSession = {
-    id: string;
-    member_name: string;
-    session_date: string;
-    notes: string | null;
-    price: number;
-    payment_method: string | null;
-    session_type: "package" | "single";
-};
 
 export default function TrainerDetailPage({
     params,
@@ -64,17 +34,117 @@ export default function TrainerDetailPage({
     const [loading, setLoading] = useState(true);
     const [packages, setPackages] = useState<TrainerPackage[]>([]);
     const [members, setMembers] = useState<TrainerMember[]>([]);
-    const [availableMembers, setAvailableMembers] = useState<AvailableMember[]>([]);
+    const [availableMembers, setAvailableMembers] =
+        useState<AvailableMember[]>([]);
+
+    // Modal notifikasi
+    const [feedback, setFeedback] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        type: "success" | "error" | "warning" | "info";
+    }>({
+        open: false,
+        title: "",
+        message: "",
+        type: "info",
+    });
+
+    // Modal konfirmasi
+    const [confirmation, setConfirmation] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: (() => void | Promise<void>) | null;
+    }>({
+        open: false,
+        title: "",
+        message: "",
+        onConfirm: null,
+    });
+
+    function showFeedback(
+        title: string,
+        message: string,
+        type: "success" | "error" | "warning" | "info" = "info"
+    ) {
+        setFeedback({ open: true, title, message, type });
+    }
+
+    function askConfirmation(
+        title: string,
+        message: string,
+        onConfirm: () => void | Promise<void>
+    ) {
+        setConfirmation({ open: true, title, message, onConfirm });
+    }
+
+    function closeConfirmation() {
+        setConfirmation({
+            open: false,
+            title: "",
+            message: "",
+            onConfirm: null,
+        });
+    }
+
+    /* =========================
+       MEMBER YANG DITANGANI
+    ========================= */
 
     const [memberSearch, setMemberSearch] = useState("");
     const [memberFilter, setMemberFilter] = useState<
         "all" | "active" | "inactive"
     >("all");
 
+    const [memberPage, setMemberPage] = useState(1);
+    const membersPerPage = 5;
+
     const [isMemberFormOpen, setIsMemberFormOpen] = useState(false);
+
+    const [packagePage, setPackagePage] = useState(1);
+    const packagesPerPage = 5;
+
     const [selectedMemberId, setSelectedMemberId] = useState("");
     const [savingMember, setSavingMember] = useState(false);
-    const [packageMembers, setPackageMembers] = useState<TrainerPackageMember[]>([]);
+
+    const filteredMembers = members.filter((item) => {
+        const search = memberSearch.trim().toLowerCase();
+
+        const matchesSearch = item.name.toLowerCase().includes(search);
+
+        if (!matchesSearch) {
+            return false;
+        }
+
+        if (memberFilter === "active") {
+            return item.has_active_package;
+        }
+
+        if (memberFilter === "inactive") {
+            return !item.has_active_package;
+        }
+
+        return true;
+    });
+
+    const memberTotalPages = Math.ceil(
+        filteredMembers.length / membersPerPage
+    );
+
+    const paginatedMembers = filteredMembers.slice(
+        (memberPage - 1) * membersPerPage,
+        memberPage * membersPerPage
+    );
+
+    /* =========================
+       PAKET MEMBER
+    ========================= */
+
+    const [packageMembers, setPackageMembers] = useState<
+        TrainerPackageMember[]
+    >([]);
+
     const [packageMemberSearch, setPackageMemberSearch] = useState("");
 
     const [packageMemberFilter, setPackageMemberFilter] = useState<
@@ -88,16 +158,25 @@ export default function TrainerDetailPage({
     const filteredPackageMembers = packageMembers.filter((item) => {
         const search = packageMemberSearch.trim().toLowerCase();
 
+        const formattedDate = new Date(
+            item.purchase_date
+        ).toLocaleDateString("id-ID");
+
         const matchesSearch =
             item.member_name.toLowerCase().includes(search) ||
-            item.package_name.toLowerCase().includes(search);
+            item.package_name.toLowerCase().includes(search) ||
+            formattedDate.toLowerCase().includes(search) ||
+            item.purchase_date.toLowerCase().includes(search);
 
         if (!matchesSearch) {
             return false;
         }
 
         if (packageMemberFilter === "active") {
-            return item.status === "active" && item.remaining_sessions > 0;
+            return (
+                item.status === "active" &&
+                item.remaining_sessions > 0
+            );
         }
 
         if (packageMemberFilter === "history") {
@@ -120,35 +199,16 @@ export default function TrainerDetailPage({
         packageMemberPage * packageMembersPerPage
     );
 
-    const filteredMembers = members.filter((item) => {
-        const search = memberSearch.trim().toLowerCase();
-
-        const matchesSearch = item.name.toLowerCase().includes(search);
-
-        if (!matchesSearch) {
-            return false;
-        }
-
-        if (memberFilter === "active") {
-            return item.has_active_package;
-        }
-
-        if (memberFilter === "inactive") {
-            return !item.has_active_package;
-        }
-
-        return true;
-    });
-
-    const activePackageMembers = packageMembers.filter(
-        (item: TrainerPackageMember) =>
-            item.status === "active" && item.remaining_sessions > 0
-    );
+    /* =========================
+       SESI TRAINER
+    ========================= */
 
     const [sessions, setSessions] = useState<TrainerSession[]>([]);
+
     const [sessionTypeFilter, setSessionTypeFilter] = useState<
         "all" | "package" | "single"
     >("all");
+
     const [sessionPaymentFilter, setSessionPaymentFilter] = useState<
         "all" | "cash" | "qris" | "transfer"
     >("all");
@@ -157,14 +217,21 @@ export default function TrainerDetailPage({
     const [sessionPage, setSessionPage] = useState(1);
 
     const sessionsPerPage = 5;
+
     const [sessionStartDate, setSessionStartDate] = useState("");
     const [sessionEndDate, setSessionEndDate] = useState("");
 
     const filteredSessions = sessions.filter((session) => {
         const search = sessionSearch.trim().toLowerCase();
 
+        const formattedDate = new Date(
+            session.session_date
+        ).toLocaleDateString("id-ID");
+
         const matchesSearch =
             session.member_name.toLowerCase().includes(search) ||
+            formattedDate.toLowerCase().includes(search) ||
+            session.session_date.toLowerCase().includes(search) ||
             (session.notes ?? "").toLowerCase().includes(search);
 
         const matchesType =
@@ -176,10 +243,12 @@ export default function TrainerDetailPage({
             session.payment_method === sessionPaymentFilter;
 
         const matchesStartDate =
-            !sessionStartDate || session.session_date >= sessionStartDate;
+            !sessionStartDate ||
+            session.session_date >= sessionStartDate;
 
         const matchesEndDate =
-            !sessionEndDate || session.session_date <= sessionEndDate;
+            !sessionEndDate ||
+            session.session_date <= sessionEndDate;
 
         return (
             matchesSearch &&
@@ -198,47 +267,255 @@ export default function TrainerDetailPage({
         (sessionPage - 1) * sessionsPerPage,
         sessionPage * sessionsPerPage
     );
+
+    /* =========================
+       EDIT TRAINER
+    ========================= */
+
     const [isEditing, setIsEditing] = useState(false);
+
     const [name, setName] = useState("");
     const [phone, setPhone] = useState("");
     const [specialization, setSpecialization] = useState("");
     const [pricePerSession, setPricePerSession] = useState("");
+
     const [saving, setSaving] = useState(false);
 
+    /* =========================
+       PAKET TRAINER
+    ========================= */
+
     const [isPackageFormOpen, setIsPackageFormOpen] = useState(false);
+
     const [packageName, setPackageName] = useState("");
     const [packageSessionCount, setPackageSessionCount] = useState("");
     const [packagePrice, setPackagePrice] = useState("");
     const [savingPackage, setSavingPackage] = useState(false);
     const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
 
+    const [packageSearch, setPackageSearch] = useState("");
+    const [packageFilter, setPackageFilter] = useState<
+        "all" | "active" | "inactive"
+    >("all");
+
+    const filteredPackages = packages.filter((item) => {
+        const keyword = packageSearch.trim().toLowerCase();
+
+        const matchesSearch = item.name
+            .toLowerCase()
+            .includes(keyword);
+
+        const matchesStatus =
+            packageFilter === "all" ||
+            item.status === packageFilter;
+
+        return matchesSearch && matchesStatus;
+    });
+
+    const packageTotalPages = Math.ceil(
+        filteredPackages.length / packagesPerPage
+    );
+
+    const paginatedPackages = filteredPackages.slice(
+        (packagePage - 1) * packagesPerPage,
+        packagePage * packagesPerPage
+    );
+
+
+    async function deleteTrainer() {
+        if (!trainer || trainer.status !== "inactive") {
+            showFeedback(
+                "Tidak Dapat Menghapus",
+                "Hanya trainer nonaktif yang dapat dihapus.",
+                "warning"
+            );
+            return;
+        }
+
+        const supabase = createClient();
+        const branchId = getActiveBranchId();
+
+        if (!branchId) {
+            showFeedback(
+                "Cabang Belum Dipilih",
+                "Cabang aktif belum dipilih.",
+                "warning"
+            );
+            return;
+        }
+
+        setSaving(true);
+
+        try {
+            // Pastikan trainer masih ada di cabang aktif
+            const { data: foundTrainer, error: findError } = await supabase
+                .from("trainers")
+                .select("id, name, status")
+                .eq("id", trainer.id)
+                .eq("branch_id", branchId)
+                .maybeSingle();
+
+            if (findError) throw findError;
+
+            if (!foundTrainer) {
+                showFeedback(
+                    "Trainer Tidak Ditemukan",
+                    "Trainer tidak ditemukan di cabang aktif.",
+                    "warning"
+                );
+                return;
+            }
+
+            if (foundTrainer.status !== "inactive") {
+                showFeedback(
+                    "Trainer Masih Aktif",
+                    "Trainer harus dinonaktifkan sebelum dihapus.",
+                    "warning"
+                );
+                return;
+            }
+
+            // Periksa semua tabel yang menyimpan interaksi trainer
+            const checks = [
+                {
+                    table: "trainer_members",
+                    label: "data anggota yang ditangani",
+                },
+                {
+                    table: "trainer_packages",
+                    label: "data paket trainer",
+                },
+                {
+                    table: "trainer_package_members",
+                    label: "data pembelian paket",
+                },
+                {
+                    table: "trainer_sessions",
+                    label: "riwayat sesi latihan",
+                },
+            ] as const;
+
+            for (const check of checks) {
+                const { count, error } = await supabase
+                    .from(check.table)
+                    .select("id", { count: "exact", head: true })
+                    .eq("trainer_id", trainer.id);
+
+                if (error) throw error;
+
+                if ((count ?? 0) > 0) {
+                    showFeedback(
+                        "Trainer Tidak Dapat Dihapus",
+                        `Trainer masih memiliki ${check.label}. Data tersebut harus dipertahankan.`,
+                        "warning"
+                    );
+                    return;
+                }
+            }
+
+            // Tampilkan modal konfirmasi sebelum menghapus
+            askConfirmation(
+                "Hapus Trainer?",
+                `Yakin ingin menghapus trainer "${foundTrainer.name}" secara permanen? Tindakan ini tidak dapat dibatalkan.`,
+                async () => {
+                    setSaving(true);
+
+                    try {
+                        const { data, error } = await supabase
+                            .from("trainers")
+                            .delete()
+                            .eq("id", trainer.id)
+                            .eq("branch_id", branchId)
+                            .eq("status", "inactive")
+                            .select("id");
+
+                        if (error) throw error;
+
+                        if (!data || data.length === 0) {
+                            showFeedback(
+                                "Penghapusan Gagal",
+                                "Trainer tidak terhapus. Periksa izin database dan status trainer.",
+                                "error"
+                            );
+                            return;
+                        }
+
+                        showFeedback(
+                            "Berhasil",
+                            "Trainer berhasil dihapus.",
+                            "success"
+                        );
+
+                        // Tunggu sebentar agar pesan berhasil terlihat
+                        window.setTimeout(() => {
+                            window.location.href = "/trainers";
+                        }, 1200);
+                    } catch (error) {
+                        console.error("Gagal menghapus trainer:", error);
+
+                        showFeedback(
+                            "Penghapusan Gagal",
+                            "Trainer gagal dihapus. Periksa relasi data dan izin database.",
+                            "error"
+                        );
+                    } finally {
+                        setSaving(false);
+                    }
+                }
+            );
+        } catch (error) {
+            console.error("Gagal memeriksa trainer:", error);
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Gagal memeriksa data trainer. Silakan coba lagi.",
+                "error"
+            );
+        } finally {
+            setSaving(false);
+        }
+    }
+
+
+    /* =========================
+       CATAT SESI
+    ========================= */
+
     const [isSessionFormOpen, setIsSessionFormOpen] = useState(false);
+
     const [sessionPackageMemberId, setSessionPackageMemberId] = useState("");
     const [sessionDate, setSessionDate] = useState("");
     const [sessionNotes, setSessionNotes] = useState("");
 
-    const [sessionMemberId, setSessionMemberId] = useState("");
-    const [sessionPaymentMethod, setSessionPaymentMethod] = useState("cash");
+    const [sessionPaymentMethod, setSessionPaymentMethod] =
+        useState("cash");
 
-    const [sessionCustomerType, setSessionCustomerType] = useState<
-        "member" | "non-member"
-    >("member");
 
     const [sessionVisitorName, setSessionVisitorName] = useState("");
 
     const [savingSession, setSavingSession] = useState(false);
 
-    const [sessionType, setSessionType] = useState<"package" | "single">(
-        "package"
-    );
+    const [sessionType, setSessionType] = useState<
+        "package" | "single"
+    >("package");
+
+    /* =========================
+       BELI PAKET
+    ========================= */
 
     const [isPurchaseFormOpen, setIsPurchaseFormOpen] = useState(false);
+
     const [purchaseMemberId, setPurchaseMemberId] = useState("");
     const [purchasePackageId, setPurchasePackageId] = useState("");
     const [purchaseDate, setPurchaseDate] = useState("");
     const [purchasePaymentMethod, setPurchasePaymentMethod] = useState("");
     const [purchaseNotes, setPurchaseNotes] = useState("");
+
     const [savingPurchase, setSavingPurchase] = useState(false);
+
+    /* =========================
+       LOAD TRAINER
+    ========================= */
 
     useEffect(() => {
         async function loadTrainer() {
@@ -254,7 +531,9 @@ export default function TrainerDetailPage({
 
             const { data, error } = await supabase
                 .from("trainers")
-                .select("id, name, phone, specialization, price_per_session, status")
+                .select(
+                    "id, name, phone, specialization, price_per_session, status"
+                )
                 .eq("id", id)
                 .eq("branch_id", branchId)
                 .single();
@@ -266,11 +545,13 @@ export default function TrainerDetailPage({
             }
 
             setTrainer(data);
+
             await loadPackages(id);
             await loadSessionMembers(id);
             await loadAvailableMembers(id);
             await loadPackageMembers(id);
             await loadSessions(id);
+
             setLoading(false);
         }
 
@@ -293,6 +574,10 @@ export default function TrainerDetailPage({
         );
     }
 
+    /* =========================
+       EDIT TRAINER
+    ========================= */
+
     function startEditing() {
         if (!trainer) return;
 
@@ -304,6 +589,10 @@ export default function TrainerDetailPage({
         setIsEditing(true);
     }
 
+    /* =========================
+       LOAD PACKAGES
+    ========================= */
+
     async function loadPackages(trainerId: string) {
         const supabase = createClient();
 
@@ -314,47 +603,65 @@ export default function TrainerDetailPage({
             .order("created_at", { ascending: false });
 
         if (error) {
-            console.error("Gagal mengambil paket trainer:", error);
+            console.error(
+                "Gagal mengambil paket trainer:",
+                error
+            );
             return;
         }
 
         setPackages(data ?? []);
     }
 
+    /* =========================
+       LOAD MEMBER TRAINER
+    ========================= */
+
     async function loadSessionMembers(trainerId: string) {
         const supabase = createClient();
 
-        const { data: relations, error: relationError } = await supabase
-            .from("trainer_members")
-            .select("member_id")
-            .eq("trainer_id", trainerId);
+        const { data: relations, error: relationError } =
+            await supabase
+                .from("trainer_members")
+                .select("member_id, created_at")
+                .eq("trainer_id", trainerId)
+                .order("created_at", { ascending: false });
 
         if (relationError) {
-            console.error("Gagal mengambil member trainer:", relationError);
+            console.error(
+                "Gagal mengambil member trainer:",
+                relationError
+            );
             return;
         }
 
-        const memberIds = (relations ?? []).map((item) => item.member_id);
+        const memberIds = (relations ?? []).map(
+            (item) => item.member_id
+        );
 
         if (memberIds.length === 0) {
             setMembers([]);
             return;
         }
 
-        const { data: memberData, error: memberError } = await supabase
-            .from("members")
-            .select("id, name")
-            .in("id", memberIds)
-            .order("name");
+        const { data: memberData, error: memberError } =
+            await supabase
+                .from("members")
+                .select("id, name")
+                .in("id", memberIds)
 
         if (memberError) {
-            console.error("Gagal mengambil data member:", memberError);
+            console.error(
+                "Gagal mengambil data member:",
+                memberError
+            );
             return;
         }
 
-        // Hanya mengambil paket yang masih aktif
-        // dan masih memiliki sisa sesi.
-        const { data: activePackages, error: packageError } = await supabase
+        const {
+            data: activePackages,
+            error: packageError,
+        } = await supabase
             .from("trainer_package_members")
             .select("member_id, remaining_sessions")
             .eq("trainer_id", trainerId)
@@ -377,20 +684,27 @@ export default function TrainerDetailPage({
             ])
         );
 
-        const membersWithPackage = (memberData ?? []).map((member) => {
-            const remainingSessions =
-                activePackageMap.get(member.id) ?? 0;
+        const membersWithPackage = (memberData ?? []).map(
+            (member) => {
+                const remainingSessions =
+                    activePackageMap.get(member.id) ?? 0;
 
-            return {
-                id: member.id,
-                name: member.name,
-                remaining_sessions: remainingSessions,
-                has_active_package: remainingSessions > 0,
-            };
-        });
+                return {
+                    id: member.id,
+                    name: member.name,
+                    remaining_sessions: remainingSessions,
+                    has_active_package:
+                        remainingSessions > 0,
+                };
+            }
+        );
 
         setMembers(membersWithPackage);
     }
+
+    /* =========================
+       LOAD AVAILABLE MEMBER
+    ========================= */
 
     async function loadAvailableMembers(trainerId: string) {
         const supabase = createClient();
@@ -401,21 +715,26 @@ export default function TrainerDetailPage({
             return;
         }
 
-        const { data: allMembers, error: memberError } = await supabase
-            .from("members")
-            .select("id, name")
-            .eq("branch_id", branchId)
-            .order("name");
+        const { data: allMembers, error: memberError } =
+            await supabase
+                .from("members")
+                .select("id, name")
+                .eq("branch_id", branchId)
+                .order("name");
 
         if (memberError) {
-            console.error("Gagal mengambil daftar member:", memberError);
+            console.error(
+                "Gagal mengambil daftar member:",
+                memberError
+            );
             return;
         }
 
-        const { data: relations, error: relationError } = await supabase
-            .from("trainer_members")
-            .select("member_id")
-            .eq("trainer_id", trainerId);
+        const { data: relations, error: relationError } =
+            await supabase
+                .from("trainer_members")
+                .select("member_id")
+                .eq("trainer_id", trainerId);
 
         if (relationError) {
             console.error(
@@ -426,174 +745,288 @@ export default function TrainerDetailPage({
         }
 
         const assignedMemberIds = new Set(
-            (relations ?? []).map((item) => item.member_id)
+            (relations ?? []).map(
+                (item) => item.member_id
+            )
         );
 
         setAvailableMembers(
             (allMembers ?? []).filter(
-                (member) => !assignedMemberIds.has(member.id)
+                (member) =>
+                    !assignedMemberIds.has(member.id)
             )
         );
     }
 
-    async function addTrainerMember(event: React.FormEvent<HTMLFormElement>) {
+    /* =========================
+   TAMBAH MEMBER TRAINER
+========================= */
+
+    async function addTrainerMember(
+        event: React.FormEvent<HTMLFormElement>
+    ) {
         event.preventDefault();
 
-        if (!selectedMemberId) return;
+        if (!selectedMemberId) {
+            showFeedback(
+                "Member Belum Dipilih",
+                "Pilih member terlebih dahulu.",
+                "warning"
+            );
+            return;
+        }
 
         const trainerId = trainer?.id;
 
         if (!trainerId) {
-            alert("Data trainer belum tersedia.");
+            showFeedback(
+                "Data Trainer Belum Tersedia",
+                "Data trainer belum tersedia. Silakan coba lagi.",
+                "warning"
+            );
             return;
         }
 
         setSavingMember(true);
 
-        const supabase = createClient();
+        try {
+            const supabase = createClient();
 
-        const { error } = await supabase
-            .from("trainer_members")
-            .insert({
-                trainer_id: trainerId,
-                member_id: selectedMemberId,
-                start_date: new Date().toISOString().split("T")[0],
-            });
+            const { error } = await supabase
+                .from("trainer_members")
+                .insert({
+                    trainer_id: trainerId,
+                    member_id: selectedMemberId,
+                    start_date: new Date()
+                        .toISOString()
+                        .split("T")[0],
+                });
 
-        if (error) {
-            console.error("Gagal menambahkan member:", error);
-            alert(error.message);
+            if (error) {
+                console.error(
+                    "Gagal menambahkan member:",
+                    error
+                );
+
+                showFeedback(
+                    "Gagal Menambahkan Member",
+                    `Member gagal ditambahkan: ${error.message}`,
+                    "error"
+                );
+                return;
+            }
+
+            setSelectedMemberId("");
+            setIsMemberFormOpen(false);
+
+            await loadSessionMembers(trainerId);
+            await loadAvailableMembers(trainerId);
+
+            showFeedback(
+                "Berhasil",
+                "Member berhasil ditambahkan ke trainer.",
+                "success"
+            );
+        } catch (error) {
+            console.error(
+                "Terjadi kesalahan saat menambahkan member:",
+                error
+            );
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Member gagal ditambahkan. Silakan coba lagi.",
+                "error"
+            );
+        } finally {
             setSavingMember(false);
-            return;
         }
-
-        setSelectedMemberId("");
-        setIsMemberFormOpen(false);
-
-        await loadSessionMembers(trainerId);
-        await loadAvailableMembers(trainerId);
-
-        setSavingMember(false);
     }
+    /* =========================
+        HAPUS MEMBER TRAINER
+    ========================= */
 
     async function removeTrainerMember(memberId: string) {
-        const confirmed = window.confirm(
-            "Hapus member ini dari daftar trainer?"
-        );
-
-        if (!confirmed) return;
-
         const trainerId = trainer?.id;
 
         if (!trainerId) {
-            alert("Data trainer belum tersedia.");
-            return;
-        }
-
-        const supabase = createClient();
-
-        // Cek apakah member masih memiliki paket PT yang aktif
-        // dan masih memiliki sisa sesi.
-        const { data: activePackage, error: packageError } = await supabase
-            .from("trainer_package_members")
-            .select("id")
-            .eq("trainer_id", trainerId)
-            .eq("member_id", memberId)
-            .eq("status", "active")
-            .gt("remaining_sessions", 0)
-            .limit(1)
-            .maybeSingle();
-
-        if (packageError) {
-            console.error(
-                "Gagal mengecek paket trainer member:",
-                packageError
-            );
-            alert(packageError.message);
-            return;
-        }
-
-        if (activePackage) {
-            alert(
-                "Member masih memiliki paket PT yang aktif dan memiliki sisa sesi. Member belum dapat dihapus dari trainer."
+            showFeedback(
+                "Data Tidak Tersedia",
+                "Data trainer belum tersedia.",
+                "warning"
             );
             return;
         }
 
-        // Jika tidak ada paket aktif yang tersisa,
-        // hubungan member dengan trainer boleh dihapus.
-        const { error } = await supabase
-            .from("trainer_members")
-            .delete()
-            .eq("trainer_id", trainerId)
-            .eq("member_id", memberId);
+        askConfirmation(
+            "Hapus Member dari Trainer?",
+            "Yakin ingin menghapus member ini dari daftar trainer?",
+            async () => {
+                const supabase = createClient();
 
-        if (error) {
-            console.error("Gagal menghapus member dari trainer:", error);
-            alert(error.message);
-            return;
-        }
+                try {
+                    const {
+                        data: activePackage,
+                        error: packageError,
+                    } = await supabase
+                        .from("trainer_package_members")
+                        .select("id")
+                        .eq("trainer_id", trainerId)
+                        .eq("member_id", memberId)
+                        .eq("status", "active")
+                        .gt("remaining_sessions", 0)
+                        .limit(1)
+                        .maybeSingle();
 
-        await loadSessionMembers(trainerId);
-        await loadAvailableMembers(trainerId);
+                    if (packageError) {
+                        console.error(
+                            "Gagal mengecek paket trainer member:",
+                            packageError
+                        );
+
+                        showFeedback(
+                            "Gagal Memeriksa Paket",
+                            packageError.message,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    if (activePackage) {
+                        showFeedback(
+                            "Member Tidak Dapat Dihapus",
+                            "Member masih memiliki paket PT aktif dengan sisa sesi. Member belum dapat dihapus dari trainer.",
+                            "warning"
+                        );
+                        return;
+                    }
+
+                    const { error } = await supabase
+                        .from("trainer_members")
+                        .delete()
+                        .eq("trainer_id", trainerId)
+                        .eq("member_id", memberId);
+
+                    if (error) {
+                        console.error(
+                            "Gagal menghapus member dari trainer:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Menghapus Member",
+                            error.message,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    await loadSessionMembers(trainerId);
+                    await loadAvailableMembers(trainerId);
+
+                    showFeedback(
+                        "Berhasil",
+                        "Member berhasil dihapus dari daftar trainer.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat menghapus member:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Member gagal dihapus. Silakan coba lagi.",
+                        "error"
+                    );
+                }
+            }
+        );
     }
 
-    async function loadPackageMembers(trainerId: string) {
+    /* =========================
+       LOAD PAKET MEMBER
+    ========================= */
+
+    async function loadPackageMembers(
+        trainerId: string
+    ) {
         const supabase = createClient();
 
         const { data, error } = await supabase
             .from("trainer_package_members")
             .select(`
-            id,
-            member_id,
-            trainer_package_id,
-            total_sessions,
-            remaining_sessions,
-            purchase_date,
-            status,
-            members (
-                name
-            ),
-            trainer_packages (
-                name
-            )
-        `)
+                id,
+                member_id,
+                trainer_package_id,
+                total_sessions,
+                remaining_sessions,
+                purchase_date,
+                status,
+                members(name),
+                trainer_packages(name)
+            `)
             .eq("trainer_id", trainerId)
-            .order("created_at", { ascending: false });
+            .order("created_at", {
+                ascending: false,
+            });
 
         if (error) {
-            console.error("Gagal mengambil paket member:", error);
+            console.error(
+                "Gagal mengambil paket member:",
+                error
+            );
             return;
         }
 
-        const formattedData = (data ?? []).map((item: any) => ({
-            id: item.id,
-            member_id: item.member_id,
-            trainer_package_id: item.trainer_package_id,
-            total_sessions: item.total_sessions,
-            remaining_sessions: item.remaining_sessions,
-            purchase_date: item.purchase_date,
-            status: item.status,
-            member_name: item.members?.name ?? "-",
-            package_name: item.trainer_packages?.name ?? "-",
-        }));
+        const formattedData = (data ?? []).map(
+            (item: any) => ({
+                id: item.id,
+                member_id: item.member_id,
+                trainer_package_id:
+                    item.trainer_package_id,
+                total_sessions:
+                    item.total_sessions,
+                remaining_sessions:
+                    item.remaining_sessions,
+                purchase_date:
+                    item.purchase_date,
+                status: item.status,
+                member_name:
+                    item.members?.name ?? "-",
+                package_name:
+                    item.trainer_packages?.name ?? "-",
+            })
+        );
 
         setPackageMembers(formattedData);
     }
 
+    /* =========================
+       LOAD SESI
+    ========================= */
+
     async function loadSessions(trainerId: string) {
         const supabase = createClient();
 
-        const searchTerm = sessionSearch.trim().toLowerCase();
+        const searchTerm = sessionSearch
+            .trim()
+            .toLowerCase();
 
         let matchingMemberIds: string[] = [];
 
         if (searchTerm) {
-            const { data: matchingMembers, error: memberSearchError } =
-                await supabase
-                    .from("members")
-                    .select("id")
-                    .ilike("name", `%${searchTerm}%`);
+            const {
+                data: matchingMembers,
+                error: memberSearchError,
+            } = await supabase
+                .from("members")
+                .select("id")
+                .ilike(
+                    "name",
+                    `%${searchTerm}%`
+                );
 
             if (memberSearchError) {
                 console.error(
@@ -603,45 +1036,60 @@ export default function TrainerDetailPage({
                 return;
             }
 
-            matchingMemberIds = (matchingMembers ?? []).map(
-                (member) => member.id
-            );
+            matchingMemberIds = (
+                matchingMembers ?? []
+            ).map((member) => member.id);
         }
 
         let query = supabase
             .from("trainer_sessions")
             .select(`
-        id,
-        member_id,
-        visitor_name,
-        session_date,
-        price,
-        payment_method,
-        notes,
-        created_at,
-        trainer_package_member_id
-    `)
+                id,
+                member_id,
+                visitor_name,
+                session_date,
+                price,
+                payment_method,
+                notes,
+                created_at,
+                trainer_package_member_id
+            `)
             .eq("trainer_id", trainerId)
-            .order("session_date", { ascending: false })
-            .order("created_at", { ascending: false });
+            .order("session_date", {
+                ascending: false,
+            })
+            .order("created_at", {
+                ascending: false,
+            });
 
         if (sessionStartDate) {
-            query = query.gte("session_date", sessionStartDate);
+            query = query.gte(
+                "session_date",
+                sessionStartDate
+            );
         }
 
         if (sessionEndDate) {
-            query = query.lte("session_date", sessionEndDate);
+            query = query.lte(
+                "session_date",
+                sessionEndDate
+            );
         }
 
         const hasDateFilter =
-            Boolean(sessionStartDate) || Boolean(sessionEndDate);
+            Boolean(sessionStartDate) ||
+            Boolean(sessionEndDate);
 
         if (searchTerm) {
-            const safeSearch = searchTerm.replace(/[,%()]/g, " ").trim();
+            const safeSearch = searchTerm
+                .replace(/[,%()]/g, " ")
+                .trim();
 
             if (matchingMemberIds.length > 0) {
                 query = query.or(
-                    `visitor_name.ilike.%${safeSearch}%,member_id.in.(${matchingMemberIds.join(",")})`
+                    `visitor_name.ilike.%${safeSearch}%,member_id.in.(${matchingMemberIds.join(
+                        ","
+                    )})`
                 );
             } else {
                 query = query.ilike(
@@ -658,22 +1106,29 @@ export default function TrainerDetailPage({
         const { data, error } = await query;
 
         if (error) {
-            console.error("Gagal mengambil riwayat sesi:", error);
+            console.error(
+                "Gagal mengambil riwayat sesi:",
+                error
+            );
             return;
         }
 
         const memberIds = (data ?? [])
             .map((item) => item.member_id)
-            .filter((id): id is string => Boolean(id));
+            .filter(
+                (id): id is string => Boolean(id)
+            );
 
         let memberMap = new Map<string, string>();
 
         if (memberIds.length > 0) {
-            const { data: memberData, error: memberError } =
-                await supabase
-                    .from("members")
-                    .select("id, name")
-                    .in("id", memberIds);
+            const {
+                data: memberData,
+                error: memberError,
+            } = await supabase
+                .from("members")
+                .select("id, name")
+                .in("id", memberIds);
 
             if (memberError) {
                 console.error(
@@ -684,96 +1139,157 @@ export default function TrainerDetailPage({
             }
 
             memberMap = new Map(
-                (memberData ?? []).map((member) => [
-                    member.id,
-                    member.name,
-                ])
+                (memberData ?? []).map(
+                    (member) => [
+                        member.id,
+                        member.name,
+                    ]
+                )
             );
         }
 
-        const formattedSessions = (data ?? []).map((item) => ({
+        const formattedSessions = (
+            data ?? []
+        ).map((item) => ({
             id: item.id,
 
             member_name: item.member_id
-                ? memberMap.get(item.member_id) ?? "-"
+                ? memberMap.get(
+                    item.member_id
+                ) ?? "-"
                 : item.visitor_name ?? "-",
 
             session_date: item.session_date,
             notes: item.notes,
 
             price: Number(item.price ?? 0),
-            payment_method: item.payment_method,
 
-            session_type: item.trainer_package_member_id
-                ? ("package" as const)
-                : ("single" as const),
+            payment_method:
+                item.payment_method,
+
+            session_type:
+                item.trainer_package_member_id
+                    ? ("package" as const)
+                    : ("single" as const),
         }));
 
         setSessions(formattedSessions);
     }
 
-    async function addPackage(e: React.FormEvent<HTMLFormElement>) {
+    /* =========================
+   TAMBAH PAKET TRAINER
+========================= */
+
+    async function addPackage(
+        e: React.FormEvent<HTMLFormElement>
+    ) {
         e.preventDefault();
 
         if (!packageName.trim()) {
-            alert("Nama paket harus diisi.");
+            showFeedback(
+                "Nama Paket Belum Diisi",
+                "Nama paket harus diisi.",
+                "warning"
+            );
             return;
         }
 
         if (Number(packageSessionCount) <= 0) {
-            alert("Jumlah sesi harus lebih dari 0.");
+            showFeedback(
+                "Jumlah Sesi Tidak Valid",
+                "Jumlah sesi harus lebih dari 0.",
+                "warning"
+            );
             return;
         }
 
         if (Number(packagePrice) < 0) {
-            alert("Harga tidak boleh kurang dari 0.");
+            showFeedback(
+                "Harga Tidak Valid",
+                "Harga tidak boleh kurang dari 0.",
+                "warning"
+            );
             return;
         }
-
-        const { id } = await params;
 
         setSavingPackage(true);
 
-        const supabase = createClient();
+        try {
+            const { id } = await params;
+            const supabase = createClient();
 
-        const { error } = await supabase
-            .from("trainer_packages")
-            .insert({
-                trainer_id: id,
-                name: packageName.trim(),
-                session_count: Number(packageSessionCount),
-                price: Number(packagePrice),
-                status: "active",
-            });
+            const { error } = await supabase
+                .from("trainer_packages")
+                .insert({
+                    trainer_id: id,
+                    name: packageName.trim(),
+                    session_count: Number(packageSessionCount),
+                    price: Number(packagePrice),
+                    status: "active",
+                });
 
-        if (error) {
-            console.error("Gagal menambahkan paket:", error);
-            alert("Gagal menambahkan paket: " + error.message);
+            if (error) {
+                console.error(
+                    "Gagal menambahkan paket:",
+                    error
+                );
+
+                showFeedback(
+                    "Gagal Menambahkan Paket",
+                    `Paket gagal ditambahkan: ${error.message}`,
+                    "error"
+                );
+                return;
+            }
+
+            setPackageName("");
+            setPackageSessionCount("");
+            setPackagePrice("");
+            setIsPackageFormOpen(false);
+
+            await loadPackages(id);
+            setPackagePage(1);
+
+            showFeedback(
+                "Berhasil",
+                "Paket trainer berhasil ditambahkan.",
+                "success"
+            );
+        } catch (error) {
+            console.error(
+                "Terjadi kesalahan saat menambahkan paket:",
+                error
+            );
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Paket gagal ditambahkan. Silakan coba lagi.",
+                "error"
+            );
+        } finally {
             setSavingPackage(false);
-            return;
         }
-
-        alert("Paket berhasil ditambahkan.");
-
-        setPackageName("");
-        setPackageSessionCount("");
-        setPackagePrice("");
-        setIsPackageFormOpen(false);
-
-        await loadPackages(id);
-
-        setSavingPackage(false);
     }
 
-    function startEditPackage(item: TrainerPackage) {
+    /* =========================
+       EDIT PAKET
+    ========================= */
+
+    function startEditPackage(
+        item: TrainerPackage
+    ) {
         setEditingPackageId(item.id);
         setPackageName(item.name);
-        setPackageSessionCount(String(item.session_count));
+        setPackageSessionCount(
+            String(item.session_count)
+        );
         setPackagePrice(String(item.price));
         setIsPackageFormOpen(true);
     }
 
-    async function updatePackage(e: React.FormEvent<HTMLFormElement>) {
+    async function updatePackage(
+        e: React.FormEvent<HTMLFormElement>
+    ) {
         e.preventDefault();
 
         if (!editingPackageId) return;
@@ -784,12 +1300,16 @@ export default function TrainerDetailPage({
         }
 
         if (Number(packageSessionCount) <= 0) {
-            alert("Jumlah sesi harus lebih dari 0.");
+            alert(
+                "Jumlah sesi harus lebih dari 0."
+            );
             return;
         }
 
         if (Number(packagePrice) < 0) {
-            alert("Harga tidak boleh kurang dari 0.");
+            alert(
+                "Harga tidak boleh kurang dari 0."
+            );
             return;
         }
 
@@ -801,14 +1321,23 @@ export default function TrainerDetailPage({
             .from("trainer_packages")
             .update({
                 name: packageName.trim(),
-                session_count: Number(packageSessionCount),
+                session_count:
+                    Number(packageSessionCount),
                 price: Number(packagePrice),
             })
             .eq("id", editingPackageId);
 
         if (error) {
-            console.error("Gagal mengubah paket:", error);
-            alert("Gagal mengubah paket: " + error.message);
+            console.error(
+                "Gagal mengubah paket:",
+                error
+            );
+
+            alert(
+                "Gagal mengubah paket: " +
+                error.message
+            );
+
             setSavingPackage(false);
             return;
         }
@@ -824,198 +1353,458 @@ export default function TrainerDetailPage({
         setIsPackageFormOpen(false);
         setSavingPackage(false);
 
-        alert("Paket berhasil diperbarui.");
+        alert(
+            "Paket berhasil diperbarui."
+        );
     }
+
+    /* =========================
+        NONAKTIFKAN PAKET
+    ========================= */
 
     async function deactivatePackage(packageId: string) {
-        const confirmed = confirm(
-            "Yakin ingin menonaktifkan paket ini?"
+        askConfirmation(
+            "Nonaktifkan Paket?",
+            "Yakin ingin menonaktifkan paket ini?",
+            async () => {
+                const supabase = createClient();
+
+                try {
+                    const { error } = await supabase
+                        .from("trainer_packages")
+                        .update({
+                            status: "inactive",
+                        })
+                        .eq("id", packageId);
+
+                    if (error) {
+                        console.error(
+                            "Gagal menonaktifkan paket:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Menonaktifkan Paket",
+                            `Gagal menonaktifkan paket: ${error.message}`,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    const { id } = await params;
+
+                    await loadPackages(id);
+
+                    showFeedback(
+                        "Berhasil",
+                        "Paket berhasil dinonaktifkan.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat menonaktifkan paket:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Paket gagal dinonaktifkan. Silakan coba lagi.",
+                        "error"
+                    );
+                }
+            }
         );
+    }
 
-        if (!confirmed) return;
+    /* =========================
+        HAPUS PAKET TRAINER
+    ========================= */
 
+    async function deletePackage(packageId: string) {
         const supabase = createClient();
 
-        const { error } = await supabase
-            .from("trainer_packages")
-            .update({
-                status: "inactive",
-            })
-            .eq("id", packageId);
+        try {
+            // Periksa paket yang akan dihapus
+            const { data: selectedPackage, error: packageError } =
+                await supabase
+                    .from("trainer_packages")
+                    .select("id, name, status")
+                    .eq("id", packageId)
+                    .maybeSingle();
 
-        if (error) {
+            if (packageError) throw packageError;
+
+            if (!selectedPackage) {
+                showFeedback(
+                    "Paket Tidak Ditemukan",
+                    "Paket yang ingin dihapus tidak ditemukan.",
+                    "warning"
+                );
+                return;
+            }
+
+            if (selectedPackage.status !== "inactive") {
+                showFeedback(
+                    "Paket Masih Aktif",
+                    "Nonaktifkan paket terlebih dahulu sebelum menghapusnya.",
+                    "warning"
+                );
+                return;
+            }
+
+            // Periksa riwayat pembelian paket
+            const { count, error: historyError } = await supabase
+                .from("trainer_package_members")
+                .select("id", { count: "exact", head: true })
+                .eq("trainer_package_id", packageId);
+
+            if (historyError) throw historyError;
+
+            if ((count ?? 0) > 0) {
+                showFeedback(
+                    "Paket Tidak Dapat Dihapus",
+                    "Paket ini memiliki riwayat pembelian. Riwayat harus dipertahankan, sehingga paket tidak dapat dihapus.",
+                    "warning"
+                );
+                return;
+            }
+
+            // Minta konfirmasi sebelum menghapus
+            askConfirmation(
+                "Hapus Paket?",
+                `Yakin ingin menghapus paket "${selectedPackage.name}" secara permanen? Tindakan ini tidak dapat dibatalkan.`,
+                async () => {
+                    try {
+                        const { error } = await supabase
+                            .from("trainer_packages")
+                            .delete()
+                            .eq("id", packageId)
+                            .eq("status", "inactive");
+
+                        if (error) throw error;
+
+                        const { id } = await params;
+                        await loadPackages(id);
+
+                        showFeedback(
+                            "Berhasil",
+                            "Paket berhasil dihapus.",
+                            "success"
+                        );
+                    } catch (error) {
+                        console.error(
+                            "Gagal menghapus paket:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Menghapus Paket",
+                            "Paket gagal dihapus. Periksa relasi data dan izin database.",
+                            "error"
+                        );
+                    }
+                }
+            );
+        } catch (error) {
             console.error(
-                "Gagal menonaktifkan paket:",
+                "Gagal memeriksa paket sebelum dihapus:",
                 error
             );
-            alert(
-                "Gagal menonaktifkan paket: " +
-                error.message
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Gagal memeriksa data paket. Silakan coba lagi.",
+                "error"
             );
-            return;
         }
-
-        const { id } = await params;
-
-        await loadPackages(id);
-
-        alert("Paket berhasil dinonaktifkan.");
     }
+
+    /* =========================
+        AKTIFKAN PAKET
+    ========================= */
 
     async function activatePackage(packageId: string) {
-        const confirmed = window.confirm(
-            "Yakin ingin mengaktifkan kembali paket ini?"
+        askConfirmation(
+            "Aktifkan Kembali Paket?",
+            "Yakin ingin mengaktifkan kembali paket ini?",
+            async () => {
+                const supabase = createClient();
+
+                try {
+                    const { error } = await supabase
+                        .from("trainer_packages")
+                        .update({
+                            status: "active",
+                        })
+                        .eq("id", packageId);
+
+                    if (error) {
+                        console.error(
+                            "Gagal mengaktifkan paket:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Mengaktifkan Paket",
+                            `Paket gagal diaktifkan: ${error.message}`,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    const { id } = await params;
+
+                    await loadPackages(id);
+
+                    showFeedback(
+                        "Berhasil",
+                        "Paket berhasil diaktifkan kembali.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat mengaktifkan paket:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Paket gagal diaktifkan. Silakan coba lagi.",
+                        "error"
+                    );
+                }
+            }
         );
-
-        if (!confirmed) return;
-
-        const supabase = createClient();
-
-        const { error } = await supabase
-            .from("trainer_packages")
-            .update({
-                status: "active",
-            })
-            .eq("id", packageId);
-
-        if (error) {
-            console.error("Gagal mengaktifkan paket:", error);
-            alert(error.message);
-            return;
-        }
-
-        const { id } = await params;
-
-        await loadPackages(id);
-
-        alert("Paket berhasil diaktifkan kembali.");
     }
 
-    async function updateTrainer(e: React.FormEvent<HTMLFormElement>) {
+    /* =========================
+        UPDATE TRAINER
+    ========================= */
+
+    async function updateTrainer(
+        e: React.FormEvent<HTMLFormElement>
+    ) {
         e.preventDefault();
 
         if (!trainer) return;
 
         setSaving(true);
 
-        const supabase = createClient();
-        const branchId = getActiveBranchId();
+        try {
+            const supabase = createClient();
+            const branchId = getActiveBranchId();
 
-        if (!branchId) {
-            alert("Cabang aktif belum dipilih.");
-            setSaving(false);
-            return;
-        }
+            if (!branchId) {
+                showFeedback(
+                    "Cabang Belum Dipilih",
+                    "Cabang aktif belum dipilih.",
+                    "warning"
+                );
+                return;
+            }
 
-        const { error } = await supabase
-            .from("trainers")
-            .update({
+            const { error } = await supabase
+                .from("trainers")
+                .update({
+                    name,
+                    phone,
+                    specialization,
+                    price_per_session: Number(pricePerSession),
+                })
+                .eq("id", trainer.id)
+                .eq("branch_id", branchId);
+
+            if (error) {
+                console.error(
+                    "Gagal mengubah trainer:",
+                    error
+                );
+
+                showFeedback(
+                    "Gagal Memperbarui Trainer",
+                    `Data trainer gagal diperbarui: ${error.message}`,
+                    "error"
+                );
+                return;
+            }
+
+            setTrainer({
+                ...trainer,
                 name,
                 phone,
                 specialization,
                 price_per_session: Number(pricePerSession),
-            })
-            .eq("id", trainer.id)
-            .eq("branch_id", branchId);
+            });
 
-        if (error) {
-            console.error("Gagal mengubah trainer:", error);
-            alert(error.message);
+            setIsEditing(false);
+
+            showFeedback(
+                "Berhasil",
+                "Data trainer berhasil diperbarui.",
+                "success"
+            );
+        } catch (error) {
+            console.error(
+                "Terjadi kesalahan saat memperbarui trainer:",
+                error
+            );
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Data trainer gagal diperbarui. Silakan coba lagi.",
+                "error"
+            );
+        } finally {
             setSaving(false);
-            return;
         }
-
-        setTrainer({
-            ...trainer,
-            name,
-            phone,
-            specialization,
-            price_per_session: Number(pricePerSession),
-        });
-
-        setIsEditing(false);
-        setSaving(false);
-
-        alert("Data trainer berhasil diperbarui.");
     }
+    /* =========================
+   NONAKTIFKAN TRAINER
+========================= */
 
     async function deactivateTrainer() {
         if (!trainer) return;
 
-        const confirmed = window.confirm(
-            "Yakin ingin menonaktifkan trainer ini?"
+        askConfirmation(
+            "Nonaktifkan Trainer?",
+            "Yakin ingin menonaktifkan trainer ini?",
+            async () => {
+                const supabase = createClient();
+                const branchId = getActiveBranchId();
+
+                if (!branchId) {
+                    showFeedback(
+                        "Cabang Belum Dipilih",
+                        "Cabang aktif belum dipilih.",
+                        "warning"
+                    );
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from("trainers")
+                        .update({
+                            status: "inactive",
+                        })
+                        .eq("id", trainer.id)
+                        .eq("branch_id", branchId);
+
+                    if (error) {
+                        console.error(
+                            "Gagal menonaktifkan trainer:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Menonaktifkan Trainer",
+                            `Trainer gagal dinonaktifkan: ${error.message}`,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    setTrainer({
+                        ...trainer,
+                        status: "inactive",
+                    });
+
+                    showFeedback(
+                        "Berhasil",
+                        "Trainer berhasil dinonaktifkan.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat menonaktifkan trainer:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Trainer gagal dinonaktifkan. Silakan coba lagi.",
+                        "error"
+                    );
+                }
+            }
         );
-
-        if (!confirmed) return;
-
-        const supabase = createClient();
-        const branchId = getActiveBranchId();
-
-        if (!branchId) {
-            alert("Cabang aktif belum dipilih.");
-            return;
-        }
-
-        const { error } = await supabase
-            .from("trainers")
-            .update({
-                status: "inactive",
-            })
-            .eq("id", trainer.id)
-            .eq("branch_id", branchId);
-
-        if (error) {
-            console.error("Gagal menonaktifkan trainer:", error);
-            alert(error.message);
-            return;
-        }
-
-        setTrainer({
-            ...trainer,
-            status: "inactive",
-        });
-
-        alert("Trainer berhasil dinonaktifkan.");
     }
+
+    /* =========================
+        AKTIFKAN TRAINER
+    ========================= */
 
     async function activateTrainer() {
         if (!trainer) return;
 
-        const confirmed = window.confirm(
-            "Yakin ingin mengaktifkan kembali trainer ini?"
+        askConfirmation(
+            "Aktifkan Kembali Trainer?",
+            "Yakin ingin mengaktifkan kembali trainer ini?",
+            async () => {
+                const supabase = createClient();
+                const branchId = getActiveBranchId();
+
+                if (!branchId) {
+                    showFeedback(
+                        "Cabang Belum Dipilih",
+                        "Cabang aktif belum dipilih.",
+                        "warning"
+                    );
+                    return;
+                }
+
+                try {
+                    const { error } = await supabase
+                        .from("trainers")
+                        .update({
+                            status: "active",
+                        })
+                        .eq("id", trainer.id)
+                        .eq("branch_id", branchId);
+
+                    if (error) {
+                        console.error(
+                            "Gagal mengaktifkan trainer:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Mengaktifkan Trainer",
+                            `Trainer gagal diaktifkan: ${error.message}`,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    setTrainer({
+                        ...trainer,
+                        status: "active",
+                    });
+
+                    showFeedback(
+                        "Berhasil",
+                        "Trainer berhasil diaktifkan kembali.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat mengaktifkan trainer:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Trainer gagal diaktifkan. Silakan coba lagi.",
+                        "error"
+                    );
+                }
+            }
         );
-
-        if (!confirmed) return;
-
-        const supabase = createClient();
-        const branchId = getActiveBranchId();
-
-        if (!branchId) {
-            alert("Cabang aktif belum dipilih.");
-            return;
-        }
-
-        const { error } = await supabase
-            .from("trainers")
-            .update({
-                status: "active",
-            })
-            .eq("id", trainer.id)
-            .eq("branch_id", branchId);
-
-        if (error) {
-            console.error("Gagal mengaktifkan trainer:", error);
-            alert(error.message);
-            return;
-        }
-
-        setTrainer({
-            ...trainer,
-            status: "active",
-        });
-
-        alert("Trainer berhasil diaktifkan kembali.");
     }
+
+    /* =========================
+        CATAT SESI
+    ========================= */
 
     async function addSession(
         e: React.FormEvent<HTMLFormElement>
@@ -1023,30 +1812,35 @@ export default function TrainerDetailPage({
         e.preventDefault();
 
         if (!sessionDate) {
-            alert("Tanggal sesi harus diisi.");
-            return;
-        }
-
-        if (sessionType === "package" && !sessionPackageMemberId) {
-            alert("Paket member harus dipilih.");
+            showFeedback(
+                "Tanggal Belum Diisi",
+                "Tanggal sesi harus diisi.",
+                "warning"
+            );
             return;
         }
 
         if (
-            sessionType === "single" &&
-            sessionCustomerType === "member" &&
-            !sessionMemberId
+            sessionType === "package" &&
+            !sessionPackageMemberId
         ) {
-            alert("Member harus dipilih.");
+            showFeedback(
+                "Paket Member Belum Dipilih",
+                "Pilih paket member yang akan digunakan.",
+                "warning"
+            );
             return;
         }
 
         if (
             sessionType === "single" &&
-            sessionCustomerType === "non-member" &&
             !sessionVisitorName.trim()
         ) {
-            alert("Nama pelanggan harus diisi.");
+            showFeedback(
+                "Nama Pelanggan Belum Diisi",
+                "Nama pelanggan harus diisi.",
+                "warning"
+            );
             return;
         }
 
@@ -1054,13 +1848,11 @@ export default function TrainerDetailPage({
 
         try {
             const supabase = createClient();
-
             const { id } = await params;
 
             let error;
 
             if (sessionType === "package") {
-                // Gunakan sesi dari paket yang sudah dibeli.
                 const result = await supabase.rpc(
                     "use_trainer_session",
                     {
@@ -1073,20 +1865,12 @@ export default function TrainerDetailPage({
 
                 error = result.error;
             } else {
-                // Bayar per sesi.
-                // RPC akan membuat transaksi + trainer session.
                 const result = await supabase.rpc(
                     "create_trainer_single_session",
                     {
                         p_trainer_id: id,
-                        p_member_id:
-                            sessionCustomerType === "member"
-                                ? sessionMemberId
-                                : null,
-                        p_visitor_name:
-                            sessionCustomerType === "non-member"
-                                ? sessionVisitorName.trim()
-                                : null,
+                        p_member_id: null,
+                        p_visitor_name: sessionVisitorName.trim(),
                         p_session_date: sessionDate,
                         p_payment_method: sessionPaymentMethod,
                         p_notes: sessionNotes,
@@ -1097,39 +1881,59 @@ export default function TrainerDetailPage({
             }
 
             if (error) {
-                console.error("Gagal mencatat sesi:", error);
-                console.error("Error message:", error.message);
-                console.error("Error details:", error.details);
-                console.error("Error hint:", error.hint);
-                console.error("Error code:", error.code);
-
-                alert(
-                    "Gagal mencatat sesi:\n" +
-                    (error.message || "Terjadi error yang tidak diketahui.")
+                console.error(
+                    "Gagal mencatat sesi:",
+                    error
                 );
 
+                showFeedback(
+                    "Gagal Mencatat Sesi",
+                    `Sesi gagal dicatat: ${error.message}`,
+                    "error"
+                );
                 return;
             }
 
-            // Refresh data setelah berhasil.
             await loadPackageMembers(id);
             await loadSessions(id);
             await loadSessionMembers(id);
 
-            // Reset form.
             setSessionType("package");
             setSessionPackageMemberId("");
-            setSessionMemberId("");
             setSessionPaymentMethod("cash");
             setSessionDate("");
             setSessionNotes("");
+            setSessionVisitorName("");
+
             setIsSessionFormOpen(false);
 
-            alert("Sesi berhasil dicatat.");
+            showFeedback(
+                "Berhasil",
+                sessionType === "package"
+                    ? "Sesi berhasil dicatat menggunakan paket member."
+                    : "Sesi berhasil dicatat dengan pembayaran per sesi.",
+                "success"
+            );
+        } catch (error) {
+            console.error(
+                "Terjadi kesalahan saat mencatat sesi:",
+                error
+            );
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Sesi gagal dicatat. Silakan coba lagi.",
+                "error"
+            );
         } finally {
             setSavingSession(false);
         }
     }
+
+
+    /* =========================
+        BELI PAKET
+    ========================= */
 
     async function purchasePackage(
         e: React.FormEvent<HTMLFormElement>
@@ -1137,7 +1941,11 @@ export default function TrainerDetailPage({
         e.preventDefault();
 
         if (!purchaseMemberId || !purchasePackageId) {
-            alert("Member dan paket harus dipilih.");
+            showFeedback(
+                "Data Belum Lengkap",
+                "Member dan paket harus dipilih.",
+                "warning"
+            );
             return;
         }
 
@@ -1158,14 +1966,23 @@ export default function TrainerDetailPage({
             );
 
             if (error) {
-                console.error("Gagal membeli paket:", error);
-                alert("Gagal membeli paket: " + error.message);
+                console.error(
+                    "Gagal membeli paket:",
+                    error
+                );
+
+                showFeedback(
+                    "Gagal Membeli Paket",
+                    `Pembelian paket gagal: ${error.message}`,
+                    "error"
+                );
                 return;
             }
 
             const { id } = await params;
 
             await loadPackageMembers(id);
+            await loadSessionMembers(id);
 
             setPurchaseMemberId("");
             setPurchasePackageId("");
@@ -1174,1660 +1991,428 @@ export default function TrainerDetailPage({
             setPurchaseNotes("");
             setIsPurchaseFormOpen(false);
 
-            alert("Paket berhasil dibeli.");
+            showFeedback(
+                "Pembelian Berhasil",
+                "Paket berhasil dibeli dan ditambahkan ke riwayat paket member.",
+                "success"
+            );
+        } catch (error) {
+            console.error(
+                "Terjadi kesalahan saat membeli paket:",
+                error
+            );
+
+            showFeedback(
+                "Terjadi Kesalahan",
+                "Pembelian paket gagal diproses. Silakan coba lagi.",
+                "error"
+            );
         } finally {
             setSavingPurchase(false);
         }
     }
 
-    async function cancelPackageMember(packageMemberId: string) {
-        const confirmed = window.confirm(
-            "Batalkan paket member ini? Paket yang sudah digunakan tidak dapat dibatalkan."
-        );
+    /* =========================
+        BATALKAN PAKET MEMBER
+    ========================= */
 
-        if (!confirmed) return;
+    async function cancelPackageMember(
+        packageMemberId: string
+    ) {
+        askConfirmation(
+            "Batalkan Paket Member?",
+            "Batalkan paket member ini? Paket yang sudah digunakan tidak dapat dibatalkan.",
+            async () => {
+                const supabase = createClient();
 
-        const supabase = createClient();
+                try {
+                    const { error } = await supabase.rpc(
+                        "cancel_trainer_package_member",
+                        {
+                            p_trainer_package_member_id:
+                                packageMemberId,
+                        }
+                    );
 
-        const { error } = await supabase.rpc(
-            "cancel_trainer_package_member",
-            {
-                p_trainer_package_member_id: packageMemberId,
+                    if (error) {
+                        console.error(
+                            "Gagal membatalkan paket:",
+                            error
+                        );
+
+                        showFeedback(
+                            "Gagal Membatalkan Paket",
+                            `Paket gagal dibatalkan: ${error.message}`,
+                            "error"
+                        );
+                        return;
+                    }
+
+                    if (trainer) {
+                        await loadPackageMembers(trainer.id);
+                        await loadSessionMembers(trainer.id);
+                    }
+
+                    showFeedback(
+                        "Berhasil",
+                        "Paket member berhasil dibatalkan.",
+                        "success"
+                    );
+                } catch (error) {
+                    console.error(
+                        "Terjadi kesalahan saat membatalkan paket:",
+                        error
+                    );
+
+                    showFeedback(
+                        "Terjadi Kesalahan",
+                        "Paket member gagal dibatalkan. Silakan coba lagi.",
+                        "error"
+                    );
+                }
             }
         );
-
-        if (error) {
-            console.error("Gagal membatalkan paket:", error);
-            alert(error.message);
-            return;
-        }
-
-        if (trainer) {
-            await loadPackageMembers(trainer.id);
-        }
     }
 
     return (
-        <main className="min-h-screen bg-gray-100 p-8 text-black">
+        <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
+
             <button
                 onClick={() => window.history.back()}
-                className="mb-6 text-sm text-gray-600 hover:text-black"
+                className="mb-6 inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 hover:text-zinc-900"
             >
-                ← Kembali
+                <span aria-hidden="true">←</span>
+                Kembali
             </button>
 
-            <div className="rounded-xl bg-white p-6 shadow">
-                <div className="border-b border-zinc-200 pb-5">
-                    <h1 className="text-2xl font-bold text-zinc-900">
-                        Profil Trainer
-                    </h1>
 
-                    <p className="mt-1 text-sm text-zinc-500">
-                        Informasi lengkap mengenai trainer.
-                    </p>
-                </div>
-
-                <div className="mt-6 grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                    <div>
-                        <p className="text-sm text-zinc-500">
-                            Nama Trainer
-                        </p>
-
-                        <p className="mt-1 font-medium text-zinc-900">
-                            {trainer.name}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-zinc-500">
-                            Nomor HP
-                        </p>
-
-                        <p className="mt-1 font-medium text-zinc-900">
-                            {trainer.phone}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-zinc-500">
-                            Spesialisasi
-                        </p>
-
-                        <p className="mt-1 font-medium text-zinc-900">
-                            {trainer.specialization}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-zinc-500">
-                            Harga per Sesi
-                        </p>
-
-                        <p className="mt-1 font-medium text-zinc-900">
-                            Rp{trainer.price_per_session.toLocaleString("id-ID")}
-                        </p>
-                    </div>
-
-                    <div>
-                        <p className="text-sm text-zinc-500">
-                            Status
-                        </p>
-
-                        <p className="mt-1 font-medium text-zinc-900">
-                            {trainer.status === "active"
-                                ? "Aktif"
-                                : "Tidak Aktif"}
-                        </p>
-                    </div>
-                </div>
-
-                <div className="mt-6 flex gap-3 border-t border-zinc-200 pt-5">
-                    <button
-                        type="button"
-                        onClick={startEditing}
-                        className="rounded-lg bg-black px-4 py-2 text-sm font-medium text-white hover:bg-zinc-800"
-                    >
-                        Edit Trainer
-                    </button>
-
-                    <button
-                        type="button"
-                        onClick={
-                            trainer.status === "inactive"
-                                ? activateTrainer
-                                : deactivateTrainer
-                        }
-                        className={`rounded-lg px-4 py-2 text-sm font-medium text-white ${trainer.status === "inactive"
-                            ? "bg-green-600 hover:bg-green-700"
-                            : "bg-red-600 hover:bg-red-700"
-                            }`}
-                    >
-                        {trainer.status === "inactive"
-                            ? "Aktifkan Kembali"
-                            : "Nonaktifkan Trainer"}
-                    </button>
-                </div>
-
-                {isEditing && (
-                    <div className="mt-6 rounded-xl bg-white p-6 shadow">
-                        <h2 className="text-xl font-bold">
-                            Edit Trainer
-                        </h2>
-
-                        <form
-                            onSubmit={updateTrainer}
-                            className="mt-5 space-y-4"
-                        >
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">
-                                    Nama Trainer
-                                </label>
-
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    required
-                                    className="w-full rounded-lg border p-3"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">
-                                    Nomor HP
-                                </label>
-
-                                <input
-                                    type="text"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
-                                    required
-                                    className="w-full rounded-lg border p-3"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">
-                                    Spesialisasi
-                                </label>
-
-                                <input
-                                    type="text"
-                                    value={specialization}
-                                    onChange={(e) =>
-                                        setSpecialization(e.target.value)
-                                    }
-                                    required
-                                    className="w-full rounded-lg border p-3"
-                                />
-                            </div>
-
-                            <div>
-                                <label className="mb-1 block text-sm font-medium">
-                                    Harga per Sesi
-                                </label>
-
-                                <input
-                                    type="number"
-                                    min="0"
-                                    value={pricePerSession}
-                                    onChange={(e) =>
-                                        setPricePerSession(e.target.value)
-                                    }
-                                    required
-                                    className="w-full rounded-lg border p-3"
-                                />
-                            </div>
-
-                            <div className="flex gap-3">
-                                <button
-                                    type="submit"
-                                    disabled={saving}
-                                    className="rounded-lg bg-orange-500 px-4 py-2 font-medium text-white"
-                                >
-                                    {saving ? "Menyimpan..." : "Simpan Perubahan"}
-                                </button>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsEditing(false)}
-                                    className="rounded-lg border px-4 py-2"
-                                >
-                                    Batal
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-            </div>
-
-            <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-zinc-900">
-                            Member yang Ditangani
-                        </h2>
-
-                        <p className="mt-1 text-sm text-zinc-500">
-                            Daftar member yang ditangani oleh trainer ini.
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                        <span className="rounded-lg bg-zinc-100 px-3 py-2 text-sm font-medium text-zinc-700">
-                            {members.length} Member
-                        </span>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setSelectedMemberId("");
-                                setIsMemberFormOpen(true);
-
-                                if (trainer) {
-                                    loadAvailableMembers(trainer.id);
-                                }
-                            }}
-                            disabled={trainer.status === "inactive"}
-                            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-                        >
-                            + Tambah Member
-                        </button>
-                    </div>
-                </div>
-
-                <div className="mt-5 flex flex-col gap-3 md:flex-row">
-                    <input
-                        type="text"
-                        value={memberSearch}
-                        onChange={(e) => setMemberSearch(e.target.value)}
-                        placeholder="Cari nama member..."
-                        className="w-full rounded-lg border border-zinc-200 px-4 py-2.5 text-sm outline-none focus:border-orange-500 md:flex-1"
-                    />
-
-                    <select
-                        value={memberFilter}
-                        onChange={(e) =>
-                            setMemberFilter(
-                                e.target.value as "all" | "active" | "inactive"
-                            )
-                        }
-                        className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm outline-none focus:border-orange-500"
-                    >
-                        <option value="all">Semua Status</option>
-                        <option value="active">Punya Paket Aktif</option>
-                        <option value="inactive">Tidak Ada Paket Aktif</option>
-                    </select>
-                </div>
-
-                {isMemberFormOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                        <form
-                            onSubmit={addTrainerMember}
-                            className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
-                        >
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-zinc-900">
-                                    Tambah Member ke Trainer
-                                </h3>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsMemberFormOpen(false)}
-                                    className="text-xl text-zinc-400 hover:text-zinc-600"
-                                    aria-label="Tutup"
-                                >
-                                    ×
-                                </button>
-                            </div>
-
-                            <div className="mt-5">
-                                <label className="text-sm text-zinc-600">
-                                    Pilih Member
-                                </label>
-
-                                <select
-                                    value={selectedMemberId}
-                                    onChange={(e) =>
-                                        setSelectedMemberId(e.target.value)
-                                    }
-                                    required
-                                    className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                >
-                                    <option value="">
-                                        Pilih Member
-                                    </option>
-
-                                    {availableMembers.map((member) => (
-                                        <option
-                                            key={member.id}
-                                            value={member.id}
-                                        >
-                                            {member.name}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-
-                            <div className="mt-6 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsMemberFormOpen(false)}
-                                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                                >
-                                    Batal
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={savingMember}
-                                    className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-                                >
-                                    {savingMember ? "Menyimpan..." : "Simpan"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                {members.length === 0 ? (
-                    <p className="mt-5 py-6 text-center text-sm text-zinc-500">
-                        Belum ada member yang ditangani.
-                    </p>
-                ) : (
-                    <div className="mt- overflow-x-auto">
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-zinc-200 text-zinc-500">
-                                    <th className="py-3 font-medium">
-                                        No
-                                    </th>
-
-                                    <th className="py-3 font-medium">
-                                        Nama Member
-                                    </th>
-
-                                    <th className="py-3 font-medium">
-                                        Status Paket
-                                    </th>
-
-                                    <th className="py-3 text-right font-medium">
-                                        Aksi
-                                    </th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {members.map((member, index) => (
-                                    <tr
-                                        key={member.id}
-                                        className="border-b border-zinc-100"
-                                    >
-                                        <td>{index + 1}</td>
-
-                                        <td>{member.name}</td>
-
-                                        <td>
-                                            {member.has_active_package ? (
-                                                <span className="text-sm text-zinc-700">
-                                                    {member.remaining_sessions} sesi tersisa
-                                                </span>
-                                            ) : (
-                                                <span className="text-sm text-zinc-500">
-                                                    Tidak ada paket aktif
-                                                </span>
-                                            )}
-                                        </td>
-
-                                        <td className="text-right">
-                                            {member.remaining_sessions > 0 ? (
-                                                <span className="text-sm text-zinc-400">
-                                                    Tidak dapat dihapus
-                                                </span>
-                                            ) : (
-                                                <button
-                                                    type="button"
-                                                    onClick={() => removeTrainerMember(member.id)}
-                                                    disabled={trainer.status === "inactive"}
-                                                    className="text-sm font-medium text-red-600 hover:text-red-700">
-                                                    Hapus
-                                                </button>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
-            </div>
-
-            <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-zinc-900">
-                            Paket Sesi
-                        </h2>
-                        <p className="mt-1 text-sm text-zinc-500">
-                            Daftar paket sesi yang tersedia untuk trainer ini.
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setEditingPackageId(null);
-                            setPackageName("");
-                            setPackageSessionCount("");
-                            setPackagePrice("");
-                            setIsPackageFormOpen(true);
-                        }}
-                        disabled={trainer.status === "inactive"}
-                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-                    >
-                        + Tambah Paket
-                    </button>
-                </div>
-
-                {isPackageFormOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                        <form
-                            onSubmit={editingPackageId ? updatePackage : addPackage}
-                            className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl"
-                        >
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-zinc-900">
-                                    {editingPackageId
-                                        ? "Edit Paket Sesi"
-                                        : "Tambah Paket Sesi"}
-                                </h3>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsPackageFormOpen(false)}
-                                    className="text-xl text-zinc-400 hover:text-zinc-600"
-                                    aria-label="Tutup"
-                                >
-                                    ×
-                                </button>
-                            </div>
-
-                            <div className="mt-5 grid gap-4 md:grid-cols-3">
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Nama Paket
-                                    </label>
-
-                                    <input
-                                        type="text"
-                                        value={packageName}
-                                        onChange={(e) =>
-                                            setPackageName(e.target.value)
-                                        }
-                                        placeholder="Contoh: Paket 5 Sesi"
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Jumlah Sesi
-                                    </label>
-
-                                    <input
-                                        type="number"
-                                        min="1"
-                                        value={packageSessionCount}
-                                        onChange={(e) =>
-                                            setPackageSessionCount(e.target.value)
-                                        }
-                                        placeholder="5"
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
-                                        required
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Harga
-                                    </label>
-
-                                    <input
-                                        type="number"
-                                        min="0"
-                                        value={packagePrice}
-                                        onChange={(e) =>
-                                            setPackagePrice(e.target.value)
-                                        }
-                                        placeholder="450000"
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
-                                        required
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mt-6 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => setIsPackageFormOpen(false)}
-                                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                                >
-                                    Batal
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={savingPackage}
-                                    className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-                                >
-                                    {savingPackage
-                                        ? "Menyimpan..."
-                                        : editingPackageId
-                                            ? "Simpan Perubahan"
-                                            : "Simpan Paket"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                <div className="mt-5 space-y-3">
-                    {packages.length === 0 ? (
-                        <p className="text-sm text-zinc-500">
-                            Belum ada paket sesi.
-                        </p>
-                    ) : (
-                        packages.map((item) => (
-                            <div
-                                key={item.id}
-                                className="flex items-center justify-between rounded-lg border border-zinc-200 p-4"
-                            >
-                                <div>
-                                    <p className="font-medium text-zinc-900">
-                                        {item.name}
-                                    </p>
-
-                                    <p className="mt-1 text-sm text-zinc-500">
-                                        {item.session_count} sesi
-                                    </p>
-                                </div>
-
-                                <div className="flex items-center gap-4">
-                                    <div className="text-right">
-                                        <p className="font-semibold text-zinc-900">
-                                            Rp {item.price.toLocaleString("id-ID")}
-                                        </p>
-
-                                        <p className="mt-1 text-xs text-zinc-500">
-                                            {item.status === "active" ? "Aktif" : "Nonaktif"}
-                                        </p>
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => startEditPackage(item)}
-                                        className="rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-700 hover:bg-zinc-50"
-                                    >
-                                        Edit
-                                    </button>
-
-                                    {item.status === "active" ? (
-                                        <button
-                                            type="button"
-                                            onClick={() => deactivatePackage(item.id)}
-                                            className="rounded-lg border border-red-200 px-3 py-2 text-sm text-red-600 hover:bg-red-50"
-                                        >
-                                            Nonaktifkan
-                                        </button>
-                                    ) : (
-                                        <button
-                                            type="button"
-                                            onClick={() => activatePackage(item.id)}
-                                            className="rounded-lg border border-green-200 px-3 py-2 text-sm text-green-600 hover:bg-green-50"
-                                        >
-                                            Aktifkan Kembali
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-                        ))
-                    )}
-                </div>
-            </div>
-
-            <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-4">
-                    <div>
-                        <h2 className="text-lg font-semibold text-zinc-900">
-                            Sesi Trainer
-                        </h2>
-
-                        <p className="mt-1 text-sm text-zinc-500">
-                            Catat dan lihat riwayat sesi latihan bersama trainer.
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setSessionType("package");
-                            setSessionPackageMemberId("");
-                            setSessionMemberId("");
-                            setSessionCustomerType("member");
-                            setSessionVisitorName("");
-                            setSessionPaymentMethod("cash");
-                            setSessionDate(
-                                new Date().toISOString().split("T")[0]
-                            );
-                            setSessionNotes("");
-                            setIsSessionFormOpen(true);
-                        }}
-                        className="shrink-0 rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-                    >
-                        + Catat Sesi
-                    </button>
-                </div>
-
-                {/* Search & Filter */}
-                <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-4">
-                    <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-5">
-                        {/* Search */}
-                        <div className="lg:col-span-2">
-                            <label className="text-xs font-medium text-zinc-600">
-                                Cari
-                            </label>
-
-                            <input
-                                type="text"
-                                value={sessionSearch}
-                                onChange={(e) => {
-                                    setSessionSearch(e.target.value);
-                                    setSessionPage(1);
-                                }}
-                                placeholder="Cari pelanggan atau catatan..."
-                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                            />
-                        </div>
-
-                        {/* Jenis Sesi */}
-                        <div>
-                            <label className="text-xs font-medium text-zinc-600">
-                                Jenis Sesi
-                            </label>
-
-                            <select
-                                value={sessionTypeFilter}
-                                onChange={(e) => {
-                                    setSessionTypeFilter(
-                                        e.target.value as "all" | "package" | "single"
-                                    );
-                                    setSessionPage(1);
-                                }}
-                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                            >
-                                <option value="all">Semua Jenis</option>
-                                <option value="package">Paket</option>
-                                <option value="single">Per Sesi</option>
-                            </select>
-                        </div>
-
-                        {/* Pembayaran */}
-                        <div>
-                            <label className="text-xs font-medium text-zinc-600">
-                                Pembayaran
-                            </label>
-
-                            <select
-                                value={sessionPaymentFilter}
-                                onChange={(e) => {
-                                    setSessionTypeFilter(
-                                        e.target.value as "all" | "package" | "single"
-                                    );
-                                    setSessionPage(1);
-                                }}
-                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                            >
-                                <option value="all">Semua Pembayaran</option>
-                                <option value="cash">Cash</option>
-                                <option value="qris">QRIS</option>
-                                <option value="transfer">
-                                    Transfer
-                                </option>
-                            </select>
-                        </div>
-
-                        {/* Reset */}
-                        <div className="flex items-end">
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    setSessionSearch("");
-                                    setSessionTypeFilter("all");
-                                    setSessionPaymentFilter("all");
-                                    setSessionStartDate("");
-                                    setSessionEndDate("");
-                                    setSessionPage(1);
-                                }}
-                                className="w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
-                            >
-                                Reset
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* Filter Tanggal */}
-                    <div className="mt-3 grid gap-3 md:grid-cols-2">
-                        <div>
-                            <label className="text-xs font-medium text-zinc-600">
-                                Dari Tanggal
-                            </label>
-
-                            <input
-                                type="date"
-                                value={sessionStartDate}
-                                onChange={(e) => {
-                                    setSessionStartDate(e.target.value);
-                                    setSessionPage(1);
-                                }}
-                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="text-xs font-medium text-zinc-600">
-                                Sampai Tanggal
-                            </label>
-
-                            <input
-                                type="date"
-                                value={sessionEndDate}
-                                onChange={(e) => {
-                                    setSessionEndDate(e.target.value);
-                                    setSessionPage(1);
-                                }}
-                                className="mt-1.5 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                            />
-                        </div>
-                    </div>
-                </div>
-
-                {/* Jumlah Data */}
-                <div className="mt-4 text-sm text-zinc-500">
-                    Menampilkan{" "}
-                    <span className="font-medium text-zinc-700">
-                        {filteredSessions.length}
-                    </span>{" "}
-                    dari{" "}
-                    <span className="font-medium text-zinc-700">
-                        {sessions.length}
-                    </span>{" "}
-                    sesi
-                </div>
-
-                {/* Tabel Riwayat */}
-                <div className="mt-3 overflow-x-auto rounded-xl border border-zinc-200">
-                    {filteredSessions.length === 0 ? (
-                        <div className="px-4 py-10 text-center text-sm text-zinc-500">
-                            Tidak ada riwayat sesi yang sesuai.
-                        </div>
-                    ) : (
-                        <table className="min-w-[950px] w-full table-fixed text-left text-sm">
-                            <thead className="bg-zinc-50">
-                                <tr className="border-b border-zinc-200 text-zinc-500">
-                                    <th className="w-14 px-4 py-3 font-medium">
-                                        No
-                                    </th>
-
-                                    <th className="w-44 px-4 py-3 font-medium">
-                                        Pelanggan
-                                    </th>
-
-                                    <th className="w-28 px-4 py-3 font-medium">
-                                        Jenis
-                                    </th>
-
-                                    <th className="w-32 px-4 py-3 font-medium">
-                                        Tanggal Sesi
-                                    </th>
-
-                                    <th className="w-36 px-4 py-3 font-medium">
-                                        Harga
-                                    </th>
-
-                                    <th className="w-32 px-4 py-3 font-medium">
-                                        Pembayaran
-                                    </th>
-
-                                    <th className="px-4 py-3 font-medium">
-                                        Catatan
-                                    </th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {paginatedSessions.map((session, index) => (
-                                    <tr
-                                        key={session.id}
-                                        className="border-b border-zinc-100 last:border-b-0 hover:bg-zinc-50"
-                                    >
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            {(sessionPage - 1) * sessionsPerPage + index + 1}
-                                        </td>
-
-                                        <td className="px-4 py-3 font-medium text-zinc-900">
-                                            {session.member_name}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            {session.session_type === "package"
-                                                ? "Paket"
-                                                : "Per Sesi"}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            {new Date(
-                                                session.session_date
-                                            ).toLocaleDateString("id-ID")}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            Rp{" "}
-                                            {Number(
-                                                session.price
-                                            ).toLocaleString("id-ID")}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            {session.payment_method
-                                                ? session.payment_method.toUpperCase()
-                                                : "-"}
-                                        </td>
-
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            <div
-                                                className="max-w-[320px] truncate"
-                                                title={session.notes ?? "-"}
-                                            >
-                                                {session.notes || "-"}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-
-                {sessionTotalPages > 1 && (
-                                <div className="mt-4 flex items-center justify-between">
-                                    <button
-                                        type="button"
-                                        onClick={() => setSessionPage(sessionPage - 1)}
-                                        disabled={sessionPage === 1}
-                                        className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40">
-                                        ← Sebelumnya
-                                    </button>
-
-                                    <div className="flex items-center gap-1">
-                                        {Array.from(
-                                            { length: sessionTotalPages },
-                                            (_, index) => index + 1
-                                        ).map((page) => (
-                                            <button
-                                                key={page}
-                                                type="button"
-                                                onClick={() => setSessionPage(page)}
-                                                className={`h-9 min-w-9 rounded-lg px-3 text-sm font-medium ${sessionPage === page
-                                                    ? "bg-orange-500 text-white"
-                                                    : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-                                                    }`}
-                                            >
-                                                {page}
-                                            </button>
-                                        ))}
-                                    </div>
-
-                                    <button
-                                        type="button"
-                                        onClick={() => setSessionPage(sessionPage + 1)}
-                                        disabled={sessionPage === sessionTotalPages}
-                                        className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
-                                    >
-                                        Berikutnya →
-                                    </button>
-                                </div>
-                            )}
-            </div>
+            {/* =========================
+                PROFIL TRAINER
+            ========================= */}
+            <TrainerProfileSection
+                trainer={trainer}
+                saving={saving}
+                isEditing={isEditing}
+                name={name}
+                phone={phone}
+                specialization={specialization}
+                onStartEditing={startEditing}
+                onActivate={activateTrainer}
+                onDeactivate={deactivateTrainer}
+                onDelete={deleteTrainer}
+                onNameChange={setName}
+                onPhoneChange={setPhone}
+                onSpecializationChange={setSpecialization}
+                pricePerSession={pricePerSession}
+                onPricePerSessionChange={setPricePerSession}
+                onSubmit={updateTrainer}
+                onCloseEdit={() => setIsEditing(false)}
+            />
+
+
+            {/* MEMBER YANG DITANGANI */}
+
+            <TrainerMembersSection
+                members={members}
+                filteredMembers={filteredMembers}
+                paginatedMembers={paginatedMembers}
+                availableMembers={availableMembers}
+                memberSearch={memberSearch}
+                memberFilter={memberFilter}
+                memberPage={memberPage}
+                memberTotalPages={memberTotalPages}
+                membersPerPage={membersPerPage}
+                trainerStatus={trainer.status}
+                isMemberFormOpen={isMemberFormOpen}
+                selectedMemberId={selectedMemberId}
+                savingMember={savingMember}
+                onSearchChange={(value) => {
+                    setMemberSearch(value);
+                    setMemberPage(1);
+                }}
+                onFilterChange={(value) => {
+                    setMemberFilter(value);
+                    setMemberPage(1);
+                }}
+                onPageChange={setMemberPage}
+                onOpenForm={() => {
+                    setSelectedMemberId("");
+                    setIsMemberFormOpen(true);
+
+                    if (trainer) {
+                        loadAvailableMembers(trainer.id);
+                    }
+                }}
+                onMemberChange={setSelectedMemberId}
+                onSubmit={addTrainerMember}
+                onCloseForm={() => setIsMemberFormOpen(false)}
+                onRemoveMember={removeTrainerMember}
+            />
+
+
+            {/* PAKET SESI */}
+
+            <TrainerPackagesSection
+                packages={packages}
+                paginatedPackages={paginatedPackages}
+                trainerStatus={trainer.status}
+                packageSearch={packageSearch}
+                packageFilter={packageFilter}
+                packagePage={packagePage}
+                packageTotalPages={packageTotalPages}
+                packagesPerPage={packagesPerPage}
+                isPackageFormOpen={isPackageFormOpen}
+                editingPackageId={editingPackageId}
+                packageName={packageName}
+                packageSessionCount={packageSessionCount}
+                packagePrice={packagePrice}
+                savingPackage={savingPackage}
+                onSearchChange={(value: string) => {
+                    setPackageSearch(value);
+                    setPackagePage(1);
+                }}
+                onFilterChange={(value: "all" | "active" | "inactive") => {
+                    setPackageFilter(value);
+                    setPackagePage(1);
+                }}
+                onPageChange={setPackagePage}
+                onOpenForm={() => {
+                    setEditingPackageId(null);
+                    setPackageName("");
+                    setPackageSessionCount("");
+                    setPackagePrice("");
+                    setIsPackageFormOpen(true);
+                }}
+                onPackageNameChange={setPackageName}
+                onPackageSessionCountChange={setPackageSessionCount}
+                onPackagePriceChange={setPackagePrice}
+                onSubmit={editingPackageId ? updatePackage : addPackage}
+                onCloseForm={() => setIsPackageFormOpen(false)}
+                onEdit={startEditPackage}
+                onDeactivate={deactivatePackage}
+                onActivate={activatePackage}
+                onDelete={deletePackage}
+            />
+
+
+            {/* SESI TRAINER */}
+
+            <TrainerSessionsSection
+                sessions={sessions}
+                filteredSessions={filteredSessions}
+                paginatedSessions={paginatedSessions}
+                sessionSearch={sessionSearch}
+                sessionTypeFilter={sessionTypeFilter}
+                sessionPaymentFilter={sessionPaymentFilter}
+                sessionStartDate={sessionStartDate}
+                sessionEndDate={sessionEndDate}
+                sessionPage={sessionPage}
+                sessionTotalPages={sessionTotalPages}
+                sessionsPerPage={sessionsPerPage}
+
+                onOpenForm={() => {
+                    setSessionType("package");
+                    setSessionPackageMemberId("");
+                    setSessionVisitorName("");
+                    setSessionPaymentMethod("cash");
+                    setSessionDate(new Date().toISOString().split("T")[0]);
+                    setSessionNotes("");
+                    setIsSessionFormOpen(true);
+                }}
+
+
+                onSearchChange={(value: string) => {
+                    setSessionSearch(value);
+                    setSessionPage(1);
+                }}
+                onTypeFilterChange={(value: "all" | "package" | "single") => {
+                    setSessionTypeFilter(value);
+                    setSessionPage(1);
+                }}
+                onPaymentFilterChange={(
+                    value: "all" | "cash" | "qris" | "transfer"
+                ) => {
+                    setSessionPaymentFilter(value);
+                    setSessionPage(1);
+                }}
+                onStartDateChange={(value: string) => {
+                    setSessionStartDate(value);
+                    setSessionPage(1);
+                }}
+                onEndDateChange={(value: string) => {
+                    setSessionEndDate(value);
+                    setSessionPage(1);
+                }}
+                onReset={() => {
+                    setSessionSearch("");
+                    setSessionTypeFilter("all");
+                    setSessionPaymentFilter("all");
+                    setSessionStartDate("");
+                    setSessionEndDate("");
+                    setSessionPage(1);
+                }}
+                onPageChange={setSessionPage}
+            />
+
+
+            {/* =========================
+                MODAL CATAT SESI
+            ========================= */}
 
             {isSessionFormOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6">
-                    <form
-                        onSubmit={addSession}
-                        className="w-full max-w-2xl overflow-y-auto rounded-xl bg-white shadow-xl"
-                        style={{ maxHeight: "90vh" }}
+                <TrainerSessionModal
+                    sessionType={sessionType}
+                    sessionPackageMemberId={
+                        sessionPackageMemberId
+                    }
+                    sessionDate={sessionDate}
+                    sessionNotes={sessionNotes}
+                    sessionPaymentMethod={
+                        sessionPaymentMethod
+                    }
+                    sessionVisitorName={
+                        sessionVisitorName
+                    }
+                    packageMembers={packageMembers}
+                    savingSession={savingSession}
+                    onSessionTypeChange={setSessionType}
+                    onPackageMemberChange={
+                        setSessionPackageMemberId
+                    }
+                    onDateChange={setSessionDate}
+                    onNotesChange={setSessionNotes}
+                    onPaymentMethodChange={
+                        setSessionPaymentMethod
+                    }
+                    onVisitorNameChange={
+                        setSessionVisitorName
+                    }
+                    onSubmit={addSession}
+                    onClose={() =>
+                        setIsSessionFormOpen(false)
+                    }
+                />
+            )}
+
+
+
+            {/* PAKET MEMBER */}
+
+            <TrainerPackageMembersSection
+                trainer={trainer}
+                members={members}
+                packages={packages}
+                packageMembers={packageMembers}
+                filteredPackageMembers={filteredPackageMembers}
+                paginatedPackageMembers={paginatedPackageMembers}
+                packageMemberSearch={packageMemberSearch}
+                packageMemberFilter={packageMemberFilter}
+                packageMemberPage={packageMemberPage}
+                packageMemberTotalPages={packageMemberTotalPages}
+                packageMembersPerPage={packageMembersPerPage}
+                isPurchaseFormOpen={isPurchaseFormOpen}
+                purchaseMemberId={purchaseMemberId}
+                purchasePackageId={purchasePackageId}
+                purchaseDate={purchaseDate}
+                purchasePaymentMethod={purchasePaymentMethod}
+                purchaseNotes={purchaseNotes}
+                savingPurchase={savingPurchase}
+                onSearchChange={(value: string) => {
+                    setPackageMemberSearch(value);
+                    setPackageMemberPage(1);
+                }}
+                onFilterChange={(value: "all" | "active" | "history") => {
+                    setPackageMemberFilter(value);
+                    setPackageMemberPage(1);
+                }}
+                onPageChange={setPackageMemberPage}
+                onOpenForm={() => {
+                    setPurchaseMemberId("");
+                    setPurchasePackageId("");
+                    setPurchaseDate(new Date().toISOString().split("T")[0]);
+                    setPurchasePaymentMethod("");
+                    setPurchaseNotes("");
+                    setIsPurchaseFormOpen(true);
+                }}
+                onMemberChange={setPurchaseMemberId}
+                onPackageChange={setPurchasePackageId}
+                onDateChange={setPurchaseDate}
+                onPaymentMethodChange={setPurchasePaymentMethod}
+                onNotesChange={setPurchaseNotes}
+                onSubmit={purchasePackage}
+                onCloseForm={() => setIsPurchaseFormOpen(false)}
+                onCancelPackage={cancelPackageMember}
+            />
+
+
+            <FeedbackModal
+                open={feedback.open}
+                title={feedback.title}
+                message={feedback.message}
+                type={feedback.type}
+                onClose={() =>
+                    setFeedback((prev) => ({ ...prev, open: false }))
+                }
+            />
+
+            {confirmation.open && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4">
+                    <div
+                        role="alertdialog"
+                        aria-modal="true"
+                        aria-labelledby="confirmation-title"
+                        className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl"
                     >
-                        {/* Header */}
-                        <div className="flex items-start justify-between border-b border-zinc-200 px-6 py-5">
-                            <div>
-                                <h3 className="text-lg font-semibold text-zinc-900">
-                                    Catat Sesi Trainer
-                                </h3>
+                        <h2
+                            id="confirmation-title"
+                            className="text-lg font-bold text-zinc-900"
+                        >
+                            {confirmation.title}
+                        </h2>
 
-                                <p className="mt-1 text-sm text-zinc-500">
-                                    Catat sesi latihan dengan trainer ini.
-                                </p>
-                            </div>
+                        <p className="mt-2 text-sm leading-6 text-zinc-600">
+                            {confirmation.message}
+                        </p>
 
+                        <div className="mt-6 flex justify-end gap-3">
                             <button
                                 type="button"
-                                onClick={() => setIsSessionFormOpen(false)}
-                                className="text-2xl leading-none text-zinc-400 hover:text-zinc-600"
-                                aria-label="Tutup"
-                            >
-                                ×
-                            </button>
-                        </div>
-
-                        {/* Form */}
-                        <div className="space-y-5 px-6 py-5">
-                            {/* Jenis Sesi */}
-                            <div>
-                                <label className="text-sm font-medium text-zinc-700">
-                                    Jenis Sesi
-                                </label>
-
-                                <select
-                                    value={sessionType}
-                                    onChange={(e) => {
-                                        const value = e.target.value as
-                                            | "package"
-                                            | "single";
-
-                                        setSessionType(value);
-                                        setSessionPackageMemberId("");
-                                        setSessionMemberId("");
-                                    }}
-                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                >
-                                    <option value="package">
-                                        Gunakan Paket Member
-                                    </option>
-
-                                    <option value="single">
-                                        Bayar Per Sesi
-                                    </option>
-                                </select>
-
-                                <p className="mt-1.5 text-xs text-zinc-500">
-                                    Pilih apakah sesi menggunakan paket yang sudah dibeli
-                                    atau dibayar secara langsung.
-                                </p>
-                            </div>
-
-                            {/* ==================== */}
-                            {/* PAKET MEMBER */}
-                            {/* ==================== */}
-                            {sessionType === "package" && (
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                    <div className="mb-4">
-                                        <h4 className="text-sm font-semibold text-zinc-800">
-                                            Penggunaan Paket
-                                        </h4>
-
-                                        <p className="mt-1 text-xs text-zinc-500">
-                                            Sesi akan menggunakan satu sesi dari paket
-                                            member yang dipilih.
-                                        </p>
-                                    </div>
-
-                                    <div className="grid gap-4 md:grid-cols-2">
-                                        <div className="md:col-span-2">
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Paket Member
-                                            </label>
-
-                                            <select
-                                                value={sessionPackageMemberId}
-                                                onChange={(e) =>
-                                                    setSessionPackageMemberId(
-                                                        e.target.value
-                                                    )
-                                                }
-                                                required
-                                                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                            >
-                                                <option value="">
-                                                    Pilih paket member
-                                                </option>
-
-                                                {activePackageMembers.map((item) => (
-                                                    <option
-                                                        key={item.id}
-                                                        value={item.id}
-                                                    >
-                                                        {item.member_name} -{" "}
-                                                        {item.package_name} (
-                                                        {item.remaining_sessions} sesi
-                                                        tersisa)
-                                                    </option>
-                                                ))}
-                                            </select>
-                                        </div>
-
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Tanggal Sesi
-                                            </label>
-
-                                            <input
-                                                type="date"
-                                                value={sessionDate}
-                                                onChange={(e) =>
-                                                    setSessionDate(e.target.value)
-                                                }
-                                                required
-                                                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Biaya Sesi
-                                            </label>
-
-                                            <div className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm font-medium text-zinc-700">
-                                                Termasuk paket
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* ==================== */}
-                            {/* BAYAR PER SESI */}
-                            {/* ==================== */}
-                            {sessionType === "single" && (
-                                <div className="rounded-lg border border-zinc-200 bg-zinc-50 p-4">
-                                    <div className="mb-4">
-                                        <h4 className="text-sm font-semibold text-zinc-800">
-                                            Pembayaran Per Sesi
-                                        </h4>
-
-                                        <p className="mt-1 text-xs text-zinc-500">
-                                            Sesi ini tidak menggunakan paket dan akan
-                                            dicatat sebagai transaksi baru.
-                                        </p>
-                                    </div>
-
-                                    <div className="grid gap-4 md:grid-cols-2">
-                                        {/* Tipe Pelanggan */}
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Tipe Pelanggan
-                                            </label>
-
-                                            <select
-                                                value={sessionCustomerType}
-                                                onChange={(e) => {
-                                                    const value = e.target.value as
-                                                        | "member"
-                                                        | "non-member";
-
-                                                    setSessionCustomerType(value);
-                                                    setSessionMemberId("");
-                                                    setSessionVisitorName("");
-                                                }}
-                                                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                            >
-                                                <option value="member">
-                                                    Member
-                                                </option>
-
-                                                <option value="non-member">
-                                                    Non-member
-                                                </option>
-                                            </select>
-                                        </div>
-
-                                        {/* Member / Non-member */}
-                                        {sessionCustomerType === "member" ? (
-                                            <div>
-                                                <label className="text-sm font-medium text-zinc-700">
-                                                    Member
-                                                </label>
-
-                                                <select
-                                                    value={sessionMemberId}
-                                                    onChange={(e) =>
-                                                        setSessionMemberId(
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    required
-                                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                                >
-                                                    <option value="">
-                                                        Pilih member
-                                                    </option>
-
-                                                    {members.map((member) => (
-                                                        <option
-                                                            key={member.id}
-                                                            value={member.id}
-                                                        >
-                                                            {member.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-                                        ) : (
-                                            <div>
-                                                <label className="text-sm font-medium text-zinc-700">
-                                                    Nama Pelanggan
-                                                </label>
-
-                                                <input
-                                                    type="text"
-                                                    value={sessionVisitorName}
-                                                    onChange={(e) =>
-                                                        setSessionVisitorName(
-                                                            e.target.value
-                                                        )
-                                                    }
-                                                    required
-                                                    placeholder="Masukkan nama pelanggan"
-                                                    className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                                />
-                                            </div>
-                                        )}
-
-                                        {/* Harga */}
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Harga Per Sesi
-                                            </label>
-
-                                            <div className="mt-2 rounded-lg border border-zinc-200 bg-white px-3 py-2.5 text-sm font-semibold text-zinc-800">
-                                                Rp{" "}
-                                                {Number(
-                                                    trainer?.price_per_session ?? 0
-                                                ).toLocaleString("id-ID")}
-                                            </div>
-                                        </div>
-
-                                        {/* Pembayaran */}
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Metode Pembayaran
-                                            </label>
-
-                                            <select
-                                                value={sessionPaymentMethod}
-                                                onChange={(e) =>
-                                                    setSessionPaymentMethod(
-                                                        e.target.value
-                                                    )
-                                                }
-                                                required
-                                                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                            >
-                                                <option value="cash">Cash</option>
-                                                <option value="qris">QRIS</option>
-                                                <option value="transfer">
-                                                    Transfer
-                                                </option>
-                                            </select>
-                                        </div>
-
-                                        {/* Tanggal */}
-                                        <div>
-                                            <label className="text-sm font-medium text-zinc-700">
-                                                Tanggal Sesi
-                                            </label>
-
-                                            <input
-                                                type="date"
-                                                value={sessionDate}
-                                                onChange={(e) =>
-                                                    setSessionDate(e.target.value)
-                                                }
-                                                required
-                                                className="mt-2 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Catatan */}
-                            <div>
-                                <label className="text-sm font-medium text-zinc-700">
-                                    Catatan
-                                </label>
-
-                                <textarea
-                                    value={sessionNotes}
-                                    onChange={(e) =>
-                                        setSessionNotes(e.target.value)
-                                    }
-                                    rows={3}
-                                    placeholder="Catatan sesi (opsional)"
-                                    className="mt-2 w-full resize-none rounded-lg border border-zinc-300 bg-white px-3 py-2.5 text-sm text-zinc-900 outline-none placeholder:text-zinc-400 focus:border-orange-500 focus:ring-1 focus:ring-orange-500"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Footer */}
-                        <div className="flex justify-end gap-2 border-t border-zinc-200 bg-zinc-50 px-6 py-4">
-                            <button
-                                type="button"
-                                onClick={() => setIsSessionFormOpen(false)}
-                                className="rounded-lg border border-zinc-300 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 hover:bg-zinc-100"
+                                onClick={() =>
+                                    setConfirmation({
+                                        open: false,
+                                        title: "",
+                                        message: "",
+                                        onConfirm: null,
+                                    })
+                                }
+                                className="rounded-lg border border-zinc-300 px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
                             >
                                 Batal
                             </button>
 
                             <button
-                                type="submit"
-                                disabled={savingSession}
-                                className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                                type="button"
+                                onClick={async () => {
+                                    const action = confirmation.onConfirm;
+
+                                    setConfirmation({
+                                        open: false,
+                                        title: "",
+                                        message: "",
+                                        onConfirm: null,
+                                    });
+
+                                    if (action) await action();
+                                }}
+                                className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
                             >
-                                {savingSession
-                                    ? "Menyimpan..."
-                                    : "Simpan Sesi"}
+                                Ya, lanjutkan
                             </button>
                         </div>
-                    </form>
+                    </div>
                 </div>
             )}
 
-            {/* Paket Member */}
-            <div className="mt-6 rounded-xl border border-zinc-200 bg-white p-6">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2 className="text-lg font-semibold text-zinc-900">
-                            Paket Member
-                        </h2>
-
-                        <p className="mt-1 text-sm text-zinc-500">
-                            Daftar paket PT yang dimiliki member.
-                        </p>
-                    </div>
-
-                    <button
-                        type="button"
-                        onClick={() => {
-                            setPurchaseMemberId("");
-                            setPurchasePackageId("");
-                            setPurchaseDate(
-                                new Date().toISOString().split("T")[0]
-                            );
-                            setPurchasePaymentMethod("");
-                            setPurchaseNotes("");
-                            setIsPurchaseFormOpen(true);
-                        }}
-                        disabled={trainer.status === "inactive"}
-                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600"
-                    >
-                        + Beli Paket
-                    </button>
-                </div>
-
-                {isPurchaseFormOpen && (
-                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-                        <form
-                            onSubmit={purchasePackage}
-                            className="w-full max-w-2xl rounded-xl bg-white p-6 shadow-xl"
-                        >
-                            <div className="flex items-center justify-between">
-                                <h3 className="text-lg font-semibold text-zinc-900">
-                                    Beli Paket Member
-                                </h3>
-
-                                <button
-                                    type="button"
-                                    onClick={() => setIsPurchaseFormOpen(false)}
-                                    className="text-xl text-zinc-400 hover:text-zinc-600"
-                                    aria-label="Tutup"
-                                >
-                                    ×
-                                </button>
-                            </div>
-
-                            <div className="mt-5 grid gap-4 md:grid-cols-2">
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Member
-                                    </label>
-
-                                    <select
-                                        value={purchaseMemberId}
-                                        onChange={(e) =>
-                                            setPurchaseMemberId(e.target.value)
-                                        }
-                                        required
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                    >
-                                        <option value="">
-                                            Pilih Member
-                                        </option>
-
-                                        {members.map((member) => (
-                                            <option
-                                                key={member.id}
-                                                value={member.id}
-                                            >
-                                                {member.name}
-                                            </option>
-                                        ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Paket Trainer
-                                    </label>
-
-                                    <select
-                                        value={purchasePackageId}
-                                        onChange={(e) =>
-                                            setPurchasePackageId(e.target.value)
-                                        }
-                                        required
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                    >
-                                        <option value="">
-                                            Pilih Paket
-                                        </option>
-
-                                        {packages
-                                            .filter(
-                                                (item) =>
-                                                    item.status === "active"
-                                            )
-                                            .map((item) => (
-                                                <option
-                                                    key={item.id}
-                                                    value={item.id}
-                                                >
-                                                    {item.name} -{" "}
-                                                    {item.session_count} sesi - Rp{" "}
-                                                    {Number(
-                                                        item.price
-                                                    ).toLocaleString("id-ID")}
-                                                </option>
-                                            ))}
-                                    </select>
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Tanggal Pembelian
-                                    </label>
-
-                                    <input
-                                        type="date"
-                                        value={purchaseDate}
-                                        onChange={(e) =>
-                                            setPurchaseDate(e.target.value)
-                                        }
-                                        required
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                    />
-                                </div>
-
-                                <div>
-                                    <label className="text-sm text-zinc-600">
-                                        Metode Pembayaran
-                                    </label>
-
-                                    <select
-                                        value={purchasePaymentMethod}
-                                        onChange={(e) =>
-                                            setPurchasePaymentMethod(
-                                                e.target.value
-                                            )
-                                        }
-                                        required
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm"
-                                    >
-                                        <option value="cash">Cash</option>
-                                        <option value="qris">QRIS</option>
-                                        <option value="transfer">
-                                            Transfer
-                                        </option>
-                                    </select>
-                                </div>
-
-                                <div className="md:col-span-2">
-                                    <label className="text-sm text-zinc-600">
-                                        Catatan
-                                    </label>
-
-                                    <textarea
-                                        value={purchaseNotes}
-                                        onChange={(e) =>
-                                            setPurchaseNotes(e.target.value)
-                                        }
-                                        rows={3}
-                                        className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm"
-                                        placeholder="Catatan pembelian (opsional)"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="mt-6 flex justify-end gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() =>
-                                        setIsPurchaseFormOpen(false)
-                                    }
-                                    className="rounded-lg border border-zinc-300 bg-white px-4 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50"
-                                >
-                                    Batal
-                                </button>
-
-                                <button
-                                    type="submit"
-                                    disabled={savingPurchase}
-                                    className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
-                                >
-                                    {savingPurchase
-                                        ? "Menyimpan..."
-                                        : "Beli Paket"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                )}
-
-                <div className="mt-5 flex flex-col gap-3 md:flex-row">
-                    <input
-                        type="text"
-                        value={packageMemberSearch}
-                        onChange={(e) => setPackageMemberSearch(e.target.value)}
-                        placeholder="Cari member atau paket..."
-                        className="w-full rounded-lg border border-zinc-200 px-4 py-2.5 text-sm outline-none focus:border-orange-500 md:flex-1"
-                    />
-
-                    <select
-                        value={packageMemberFilter}
-                        onChange={(e) =>
-                            setPackageMemberFilter(
-                                e.target.value as "all" | "active" | "history"
-                            )
-                        }
-                        className="rounded-lg border border-zinc-200 px-4 py-2.5 text-sm outline-none focus:border-orange-500"
-                    >
-                        <option value="all">Semua Status</option>
-                        <option value="active">Aktif</option>
-                        <option value="history">Riwayat</option>
-                    </select>
-                </div>
-
-                <div className="mt-5 overflow-x-auto">
-                    {packageMembers.length === 0 ? (
-                        <p className="py-6 text-center text-sm text-zinc-500">
-                            Belum ada paket member.
-                        </p>
-                    ) : (
-                        <table className="w-full text-left text-sm">
-                            <thead>
-                                <tr className="border-b border-zinc-200 text-zinc-500">
-                                    <th className="px-3 py-3 font-medium">
-                                        No
-                                    </th>
-
-                                    <th className="px-3 py-3 font-medium">
-                                        Member
-                                    </th>
-
-                                    <th className="px-3 py-3 font-medium">
-                                        Paket
-                                    </th>
-
-                                    <th className="px-3 py-3 font-medium">
-                                        Sesi
-                                    </th>
-
-                                    <th className="px-3 py-3 font-medium">
-                                        Tanggal Beli
-                                    </th>
-
-                                    <th className="px-3 py-3 font-medium">
-                                        Status
-                                    </th>
-
-                                    <th className="px-3 py-3 text-right font-medium">
-                                        Aksi
-                                    </th>
-                                </tr>
-                            </thead>
-
-                            <tbody>
-                                {paginatedPackageMembers.map((item, index) => (
-                                    <tr
-                                        key={item.id}
-                                        className="border-b border-zinc-100"
-                                    >
-                                        <td className="px-4 py-3 text-zinc-600">
-                                            {(packageMemberPage - 1) * packageMembersPerPage + index + 1}
-                                        </td>
-
-                                        <td className="px-3 py-3 font-medium text-zinc-900">
-                                            {item.member_name}
-                                        </td>
-
-                                        <td className="px-3 py-3 text-zinc-600">
-                                            {item.package_name}
-                                        </td>
-
-                                        <td className="px-3 py-3 text-zinc-600">
-                                            {item.remaining_sessions} /{" "}
-                                            {item.total_sessions}
-                                        </td>
-
-                                        <td className="px-3 py-3 text-zinc-600">
-                                            {new Date(
-                                                item.purchase_date
-                                            ).toLocaleDateString("id-ID")}
-                                        </td>
-
-                                        <td className="px-3 py-3">
-                                            {item.status === "active" &&
-                                                item.remaining_sessions > 0 ? (
-                                                <span className="text-sm text-green-600">
-                                                    Aktif
-                                                </span>
-                                            ) : item.status === "cancelled" ? (
-                                                <span className="text-sm text-red-600">
-                                                    Dibatalkan
-                                                </span>
-                                            ) : (
-                                                <span className="text-sm text-zinc-500">
-                                                    Selesai
-                                                </span>
-                                            )}
-                                        </td>
-
-                                        <td className="px-3 py-3 text-right">
-                                            {item.status === "active" &&
-                                                item.remaining_sessions ===
-                                                item.total_sessions ? (
-                                                <button
-                                                    type="button"
-                                                    onClick={() =>
-                                                        cancelPackageMember(item.id)
-                                                    }
-                                                    disabled={
-                                                        trainer.status === "inactive"
-                                                    }
-                                                    className="text-sm font-medium text-red-600 hover:text-red-700 disabled:cursor-not-allowed disabled:text-zinc-400"
-                                                >
-                                                    Batalkan
-                                                </button>
-                                            ) : (
-                                                <span className="text-sm text-zinc-400">
-                                                    -
-                                                </span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-                {packageMemberTotalPages > 1 && (
-    <div className="mt-4 flex items-center justify-between">
-        <button
-            type="button"
-            onClick={() =>
-                setPackageMemberPage(packageMemberPage - 1)
-            }
-            disabled={packageMemberPage === 1}
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-            ← Sebelumnya
-        </button>
-
-        <div className="flex items-center gap-1">
-            {Array.from(
-                { length: packageMemberTotalPages },
-                (_, index) => index + 1
-            ).map((page) => (
-                <button
-                    key={page}
-                    type="button"
-                    onClick={() => setPackageMemberPage(page)}
-                    className={`h-9 min-w-9 rounded-lg px-3 text-sm font-medium ${
-                        packageMemberPage === page
-                            ? "bg-orange-500 text-white"
-                            : "border border-zinc-300 bg-white text-zinc-700 hover:bg-zinc-50"
-                    }`}
-                >
-                    {page}
-                </button>
-            ))}
-        </div>
-
-        <button
-            type="button"
-            onClick={() =>
-                setPackageMemberPage(packageMemberPage + 1)
-            }
-            disabled={
-                packageMemberPage === packageMemberTotalPages
-            }
-            className="rounded-lg border border-zinc-300 bg-white px-3 py-2 text-sm font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-40"
-        >
-            Berikutnya →
-        </button>
-    </div>
-)}
-            </div>
         </main>
     );
 }

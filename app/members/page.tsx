@@ -3,14 +3,27 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import AddMemberForm from "@/components/AddMemberForm";
+import MemberModal from "@/components/MemberModal";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import {
+  CreditCard,
+  User,
+  Users,
+  ArrowUpRight,
+  Pencil,
+  Icon
+} from "lucide-react";
 
 type Member = {
   id: string;
   name: string;
-  phone: string;
-  membership: string;
-  status: string;
+  phone: string | null;
+  email: string | null;
+  gender: string | null;
+  address: string | null;
+  membership: string | null;
+  created_at: string;
   memberships: {
     status: string;
     end_date: string;
@@ -25,6 +38,7 @@ const ITEMS_PER_PAGE = 10;
 export default function MembersPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [search, setSearch] = useState("");
+  const [membershipFilter, setMembershipFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
 
   const [isOpen, setIsOpen] = useState(false);
@@ -42,17 +56,21 @@ export default function MembersPage() {
     }
 
     // Ambil data member
-    const { data: memberData, error: memberError } = await supabase
-      .from("members")
-      .select(`
+    const { data: memberData, error: memberError } =
+      await supabase
+        .from("members")
+        .select(`
       id,
       name,
       phone,
+      email,
+      gender,
+      address,
       membership,
-      status
+      created_at
     `)
-      .eq("branch_id", branchId)
-      .order("name", { ascending: true });
+        .eq("branch_id", branchId)
+        .order("created_at", { ascending: false });
 
     if (memberError) {
       console.error("Gagal mengambil member:", memberError);
@@ -133,13 +151,47 @@ export default function MembersPage() {
     getMembers();
   }, []);
 
+  const membershipOptions = Array.from(
+    new Set(
+      members
+        .map((member) =>
+          member.memberships?.find(
+            (membership) =>
+              membership.status === "active" &&
+              membership.end_date >=
+              new Date().toISOString().split("T")[0]
+          )?.membership_plans?.[0]?.name
+        )
+        .filter(Boolean)
+    )
+  );
+
   // Filter berdasarkan pencarian
   const filteredMembers = members.filter((member) => {
-    const keyword = search.toLowerCase();
+    const keyword = search.trim().toLowerCase();
+
+    const membershipName =
+      member.memberships?.find(
+        (membership) =>
+          membership.status === "active" &&
+          membership.end_date >=
+          new Date().toISOString().split("T")[0]
+      )?.membership_plans?.[0]?.name ?? "";
+
+    const matchesSearch =
+      (member.name ?? "").toLowerCase().includes(keyword) ||
+      (member.phone ?? "").toLowerCase().includes(keyword) ||
+      membershipName.toLowerCase().includes(keyword);
+
+    const matchesMembership =
+      membershipFilter === "all" ||
+      (membershipFilter === "none"
+        ? membershipName === ""
+        : membershipName === membershipFilter);
 
     return (
-      member.name.toLowerCase().includes(keyword) ||
-      member.phone.toLowerCase().includes(keyword)
+      matchesSearch &&
+      matchesMembership
     );
   });
 
@@ -173,274 +225,188 @@ export default function MembersPage() {
     getMembers();
   }
 
-  async function handleDelete(id: string) {
-    const confirmed = confirm(
-      "Yakin ingin menghapus member ini?"
-    );
-
-    if (!confirmed) return;
-
-    const branchId = getActiveBranchId();
-
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      return;
-    }
-
-    const supabase = createClient();
-
-    const { error } = await supabase
-      .from("members")
-      .delete()
-      .eq("id", id)
-      .eq("branch_id", branchId);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    getMembers();
-  }
-
   return (
-    <main className="min-h-screen bg-gray-100 p-8 text-black">
+    <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
       {/* Header */}
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            Members
-          </h1>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Kelola data member GymDesk.
-          </p>
+      {/* HEADER HALAMAN */}
+      <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+            <Users size={26} />
+          </div>
+
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+              Members
+            </h1>
+
+            <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+              Kelola data member, informasi kontak, serta pantau membership yang sedang dimiliki oleh setiap member.
+            </p>
+          </div>
         </div>
 
         <button
+          type="button"
           onClick={() => {
             setEditingMember(null);
             setIsOpen(true);
           }}
-          className="rounded-lg bg-black px-4 py-2 text-white"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
         >
-          + Tambah Member
+          <User size={18} />
+          Tambah Member 
         </button>
       </div>
 
-      {/* Search */}
-      <div className="mb-4">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => handleSearch(e.target.value)}
-          placeholder="Cari nama atau nomor HP..."
-          className="w-full max-w-md rounded-lg border border-gray-300 bg-white px-4 py-3 outline-none focus:border-orange-500"
-        />
+      {/* Search & Filter */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex-1">
+          <Search
+            value={search}
+            onChange={handleSearch}
+            placeholder="Cari nama member, nomor HP, atau paket membership..."
+          />
+        </div>
+
+        <select
+          value={membershipFilter}
+          onChange={(e) => {
+            setMembershipFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="h-12 w-full rounded-xl border border-zinc-300 bg-white px-4 text-sm text-zinc-700 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100 sm:w-52"
+        >
+          <option value="all">Semua Membership</option>
+          <option value="none">Belum Ada</option>
+
+          {membershipOptions.map((membership) => (
+            <option key={membership} value={membership}>
+              {membership}
+            </option>
+          ))}
+        </select>
       </div>
 
       {/* Table */}
-      <div className="overflow-x-auto rounded-xl bg-white shadow">
-        <table className="w-full min-w-[700px]">
-          <thead>
-            <tr className="border-b bg-gray-50 text-left">
-              <th className="px-5 py-4 text-sm font-semibold">
-                Nama
-              </th>
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[900px] table-fixed">
+            <colgroup>
+              <col className="w-[6%]" />
+              <col className="w-[24%]" />
+              <col className="w-[22%]" />
+              <col className="w-[20%]" />
+              <col className="w-[28%]" />
+            </colgroup>
+            <thead className="bg-zinc-100">
+              <tr className="border-b border-zinc-300 text-left">
+                <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                  No
+                </th>
+                <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                  Nama
+                </th>
 
-              <th className="px-5 py-4 text-sm font-semibold">
-                No. HP
-              </th>
+                <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                  No. HP
+                </th>
 
-              <th className="px-5 py-4 text-sm font-semibold">
-                Membership
-              </th>
+                <th className="px-4 py-4 text-xs font-bold uppercase tracking-wider text-zinc-700">
+                  Membership
+                </th>
 
-              <th className="px-5 py-4 text-sm font-semibold">
-                Status
-              </th>
+                <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wider text-zinc-700">
+                  Aksi
+                </th>
+              </tr>
+            </thead>
 
-              <th className="px-5 py-4 text-sm font-semibold">
-                Aksi
-              </th>
-            </tr>
-          </thead>
+            <tbody className="divide-y divide-zinc-100">
+              {currentMembers.length > 0 ? (
+                currentMembers.map((member, index) => (
+                  <tr
+                    key={member.id}
+                    className="border-b border-zinc-200 bg-white transition-colors hover:bg-zinc-50 last:border-b-0"
+                  >
+                    <td className="px-4 py-4 text-sm font-medium text-zinc-700">
+                      {startIndex + index + 1}
+                    </td>
+                    <td className="px-4 py-4 text-sm font-semibold text-zinc-900">
+                      {member.name}
+                    </td>
 
-          <tbody>
-            {currentMembers.length > 0 ? (
-              currentMembers.map((member) => (
-                <tr
-                  key={member.id}
-                  className="border-b last:border-b-0"
-                >
-                  <td className="px-5 py-4 font-medium">
-                    {member.name}
-                  </td>
+                    <td className="px-4 py-4 text-sm text-zinc-600">
+                      {member.phone}
+                    </td>
 
-                  <td className="px-5 py-4 text-gray-600">
-                    {member.phone}
-                  </td>
+                    <td className="px-4 py-4 text-sm text-zinc-700">
+                      {member.memberships?.find(
+                        (membership) =>
+                          membership.status === "active" &&
+                          membership.end_date >=
+                          new Date().toISOString().split("T")[0]
+                      )?.membership_plans?.[0]?.name ?? "Belum ada"}
+                    </td>
 
-                  <td className="px-5 py-4">
-                    {member.memberships?.find(
-                      (membership) =>
-                        membership.status === "active" &&
-                        membership.end_date >=
-                        new Date().toISOString().split("T")[0]
-                    )?.membership_plans?.[0]?.name ?? "Belum ada"}
-                  </td>
 
-                  <td className="px-5 py-4">
-                    <span
-                      className={`rounded-full px-3 py-1 text-sm ${member.status === "aktif"
-                        ? "bg-green-100 text-green-700"
-                        : "bg-gray-100 text-gray-600"
-                        }`}
-                    >
-                      {member.status === "aktif"
-                        ? "Aktif"
-                        : "Tidak Aktif"}
-                    </span>
-                  </td>
+                    <td className="px-4 py-4">
+                      <div className="gap-2">
+                        <a
+                          href={`/members/${member.id}`}
+                          className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-orange-700 transition-colors hover:bg-zinc-50"
+                        >
+                          <ArrowUpRight size={16} />
+                          Detail
+                        </a>
 
-                  <td className="px-5 py-4">
-                    <div className="flex gap-2">
-                      <a
-                        href={`/members/${member.id}`}
-                        className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium"
-                      >
-                        Detail
-                      </a>
-
-                      <button
-                        onClick={() => handleEdit(member)}
-                        className="rounded-lg bg-orange-500 px-3 py-2 text-sm font-medium text-black"
-                      >
-                        Edit
-                      </button>
-
-                      <button
-                        onClick={() => handleDelete(member.id)}
-                        className="rounded-lg bg-red-600 px-3 py-2 text-sm text-white"
-                      >
-                        Hapus
-                      </button>
-                    </div>
+                        <button
+                          type="button"
+                          onClick={() => handleEdit(member)}
+                          className="ml-3 inline-flex items-center justify-center gap-1.5 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm font-medium text-zinc-700 transition-colors hover:bg-zinc-50"
+                        >
+                          <Pencil size={16} />
+                          Edit
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-5 py-12 text-center text-sm text-zinc-500"
+                  >
+                    {search
+                      ? "Member tidak ditemukan."
+                      : "Belum ada data member."}
                   </td>
                 </tr>
-              ))
-            ) : (
-              <tr>
-                <td
-                  colSpan={5}
-                  className="px-5 py-10 text-center text-gray-500"
-                >
-                  {search
-                    ? "Member tidak ditemukan."
-                    : "Belum ada data member."}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* Pagination */}
-      {filteredMembers.length > 0 && (
-        <div className="mt-4 flex items-center justify-between">
-          <p className="text-sm text-gray-500">
-            Menampilkan{" "}
-            {startIndex + 1}–
-            {Math.min(
-              startIndex + ITEMS_PER_PAGE,
-              filteredMembers.length
-            )}{" "}
-            dari {filteredMembers.length} member
-          </p>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() =>
-                setCurrentPage((page) =>
-                  Math.max(page - 1, 1)
-                )
-              }
-              disabled={currentPage === 1}
-              className="rounded-lg border bg-white px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              ←
-            </button>
-
-            {Array.from(
-              { length: totalPages },
-              (_, index) => index + 1
-            ).map((page) => (
-              <button
-                key={page}
-                onClick={() => setCurrentPage(page)}
-                className={`rounded-lg px-3 py-2 ${currentPage === page
-                  ? "bg-black text-white"
-                  : "border bg-white"
-                  }`}
-              >
-                {page}
-              </button>
-            ))}
-
-            <button
-              onClick={() =>
-                setCurrentPage((page) =>
-                  Math.min(page + 1, totalPages)
-                )
-              }
-              disabled={currentPage === totalPages}
-              className="rounded-lg border bg-white px-3 py-2 disabled:cursor-not-allowed disabled:opacity-40"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Modal */}
-      {isOpen && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6">
-            <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-xl font-bold">
-                {editingMember
-                  ? "Edit Member"
-                  : "Tambah Member"}
-              </h2>
-
-              <button
-                onClick={() => {
-                  setIsOpen(false);
-                  setEditingMember(null);
-                }}
-                className="text-2xl text-gray-500"
-              >
-                ×
-              </button>
-            </div>
-
-            <AddMemberForm
-              onSuccess={handleSuccess}
-              member={editingMember ?? undefined}
-            />
-
-            <button
-              onClick={() => {
-                setIsOpen(false);
-                setEditingMember(null);
-              }}
-              className="mt-3 w-full rounded-lg border px-4 py-3"
-            >
-              Batal
-            </button>
-          </div>
-        </div>
-      )}
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        totalItems={filteredMembers.length}
+        itemsPerPage={ITEMS_PER_PAGE}
+        onPageChange={setCurrentPage}
+      />
+      <MemberModal
+        open={isOpen}
+        member={editingMember}
+        onClose={() => {
+          setIsOpen(false);
+          setEditingMember(null);
+        }}
+        onSuccess={handleSuccess}
+      />
     </main>
   );
 }

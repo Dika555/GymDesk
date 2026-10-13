@@ -1,48 +1,113 @@
 "use client";
 
+import { useState } from "react";
 import AddMemberMembershipForm from "@/components/AddMemberMembershipForm";
+import Modal from "@/components/Modal";
+import FeedbackModal from "@/components/FeedbackModal";
+
+type FeedbackType = "success" | "error" | "warning" | "info";
 
 type Props = {
   memberId: string;
   branchId: string;
   onClose: () => void;
+  onSuccess: () => void;
+  onFeedback: (
+    title: string,
+    message: string,
+    type: FeedbackType
+  ) => void;
 };
 
 export default function AddMemberMembershipModal({
   memberId,
   branchId,
   onClose,
+  onSuccess,
+  onFeedback,
 }: Props) {
+  const [saving, setSaving] = useState(false);
+
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  function handleSuccess() {
+    onClose();
+
+    onSuccess?.();
+
+    showFeedback(
+      "Membership Berhasil Ditambahkan",
+      "Membership berhasil ditambahkan dan pembayaran berhasil dicatat.",
+      "success"
+    );
+  }
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">
-            Tambah Membership
-          </h2>
+    <>
+      <Modal
+        title="Tambah Membership"
+        onClose={onClose}
+        footer={
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={saving}
+              className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              Batal
+            </button>
 
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-2xl text-gray-400 hover:text-gray-700"
-          >
-            ×
-          </button>
-        </div>
-
+            <button
+              type="submit"
+              form="member-membership-form"
+              disabled={saving}
+              className="flex-1 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {saving ? "Menyimpan..." : "Simpan Membership"}
+            </button>
+          </div>
+        }
+      >
         <AddMemberMembershipForm
           memberId={memberId}
           branchId={branchId}
+          onSuccess={onSuccess}
+          onFeedback={onFeedback}
+          onSavingChange={setSaving}
         />
+      </Modal>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 w-full rounded-lg border px-4 py-2 font-medium"
-        >
-          Batal
-        </button>
-      </div>
-    </div>
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
+    </>
   );
 }

@@ -1,41 +1,54 @@
 "use client";
 
 import EditProductForm from "./EditProductForm";
+import Modal from "@/components/Modal";
 
 type EditProductModalProps = {
   open: boolean;
   onClose: () => void;
+  onSuccess: () => void;
+  onError: (message: string) => void;
   productId: string;
 };
 
 export default function EditProductModal({
   open,
   onClose,
+  onSuccess,
+  onError,
   productId,
 }: EditProductModalProps) {
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <div className="mb-5 flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Edit Produk
-          </h2>
+    <Modal
+      open={open}
+      title="Edit Produk"
+      onClose={onClose}
+      footer={
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50"
+          >
+            Batal
+          </button>
 
           <button
-            onClick={onClose}
-            className="text-xl text-zinc-400 hover:text-zinc-700"
+            type="submit"
+            form="edit-product-form"
+            className="flex-1 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-medium text-white hover:bg-orange-600"
           >
-            ×
+            Simpan Perubahan
           </button>
         </div>
-
-        <EditProductForm
-          productId={productId}
-          onSuccess={onClose}
-        />
-      </div>
-    </div>
+      }
+      maxWidth="max-w-md"
+    >
+      <EditProductForm
+        productId={productId}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
+    </Modal>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import AddProductForm from "@/components/AddProductForm";
+import Modal from "@/components/Modal";
 
 type Props = {
   onClose: () => void;
@@ -12,32 +13,30 @@ export default function AddProductModal({
   onSuccess,
 }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
-        <div className="mb-6 flex items-center justify-between">
-          <h2 className="text-xl font-semibold text-zinc-900">
-            Tambah Produk
-          </h2>
-
+    <Modal
+      title="Tambah Produk"
+      onClose={onClose}
+      footer={
+        <div className="flex gap-3">
           <button
             type="button"
             onClick={onClose}
-            className="text-2xl text-zinc-400 hover:text-zinc-700"
+            className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50"
           >
-            ×
+            Batal
+          </button>
+
+          <button
+            type="submit"
+            form="add-product-form"
+            className="flex-1 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600"
+          >
+            Simpan Produk
           </button>
         </div>
-
-        <AddProductForm onSuccess={onSuccess} />
-
-        <button
-          type="button"
-          onClick={onClose}
-          className="mt-3 w-full rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50"
-        >
-          Batal
-        </button>
-      </div>
-    </div>
+      }
+    >
+      <AddProductForm onSuccess={onSuccess} />
+    </Modal>
   );
 }

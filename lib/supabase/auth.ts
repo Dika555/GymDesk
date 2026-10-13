@@ -18,7 +18,7 @@ export async function getCurrentUser() {
     .single();
 
   if (error) {
-    console.error(error);
+    console.error("Gagal mengambil profil pengguna.");
     return null;
   }
 

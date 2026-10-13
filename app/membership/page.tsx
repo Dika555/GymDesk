@@ -1,8 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import AddMembershipModal from "@/components/AddMembershipModal";
+import Search from "@/components/Search";
+import Pagination from "@/components/Pagination";
+import FeedbackModal from "@/components/FeedbackModal";
+import { useSearchParams } from "next/navigation";
+
+import {
+  Dumbbell,
+  IdCard,
+  Users,
+  CheckCircle2,
+  ArrowUpRight,
+  CalendarDays,
+  CreditCard,
+} from "lucide-react";
 
 type MembershipPlan = {
   id: string;
@@ -10,187 +26,120 @@ type MembershipPlan = {
   duration: number;
   price: number;
   benefits: string[];
+  is_active: boolean;
   memberCount: number;
 };
 
-type MemberSubscription = {
-  id: string;
-  start_date: string;
-  end_date: string;
-  status: string;
-  member: {
-    id: string;
-    name: string;
-    phone: string | null;
-  } | null;
-};
+function MembershipContent() {
+  const supabase = createClient();
+  const router = useRouter();
 
-export default function MembershipPage() {
   const [plans, setPlans] = useState<MembershipPlan[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [selectedPlan, setSelectedPlan] =
-    useState<MembershipPlan | null>(null);
-
   const [isFormOpen, setIsFormOpen] = useState(false);
+
   const [name, setName] = useState("");
   const [duration, setDuration] = useState("");
   const [price, setPrice] = useState("");
   const [benefits, setBenefits] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const [subscribers, setSubscribers] = useState<
-    MemberSubscription[]
-  >([]);
+  type FeedbackType = "success" | "error" | "warning" | "info";
 
-  const [loadingSubscribers, setLoadingSubscribers] =
-    useState(false);
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info"
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  const [search, setSearch] = useState("");
+  const [durationFilter, setDurationFilter] = useState("all");
+  const [currentPage, setCurrentPage] = useState(1);
+  const [expandedBenefits, setExpandedBenefits] = useState<string[]>([]);
+  const searchParams = useSearchParams();
+  const deleted = searchParams.get("deleted");
+
+  useEffect(() => {
+    if (deleted === "success") {
+      showFeedback(
+        "Paket Berhasil Dihapus",
+        "Paket membership berhasil dihapus.",
+        "success"
+      );
+
+      window.history.replaceState({}, "", "/membership");
+    }
+  }, [deleted]);
+
+  const ITEMS_PER_PAGE = 6;
 
   async function getPlans() {
-    const supabase = createClient();
+    setLoading(true);
 
-    const branchId = getActiveBranchId();
+    try {
+      const branchId = await getActiveBranchId();
 
-    if (!branchId) {
-      setPlans([]);
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
-      .from("membership_plans")
-      .select("id, name, duration, price, benefits")
-      .eq("branch_id", branchId)
-      .order("price");
-
-    if (error) {
-      console.error(error);
-      setLoading(false);
-      return;
-    }
-
-    const plansWithMemberCount = await Promise.all(
-      (data ?? []).map(async (plan) => {
-        const { count, error: countError } = await supabase
-          .from("memberships")
-          .select("id", {
-            count: "exact",
-            head: true,
-          })
-          .eq("plan_id", plan.id)
-          .eq("branch_id", branchId)
-          .eq("status", "active");
-
-        if (countError) {
-          console.error(countError);
-        }
-
-        return {
-          ...plan,
-          memberCount: count ?? 0,
-        };
-      })
-    );
-
-    setPlans(plansWithMemberCount);
-    setLoading(false);
-  }
-
-  async function getSubscribers(planId: string) {
-    setLoadingSubscribers(true);
-
-    const supabase = createClient();
-
-    const branchId = getActiveBranchId();
-
-    if (!branchId) {
-      setSubscribers([]);
-      setLoadingSubscribers(false);
-      return;
-    }
-
-    // Ambil membership dari paket yang dipilih
-    const { data: membershipData, error: membershipError } =
-      await supabase
-        .from("memberships")
-        .select(`
-        id,
-        member_id,
-        start_date,
-        end_date,
-        status
-      `)
-        .eq("plan_id", planId)
-        .eq("branch_id", branchId)
-        .order("start_date", { ascending: false });
-
-    if (membershipError) {
-      console.error(
-        "Gagal mengambil membership:",
-        membershipError
-      );
-      setSubscribers([]);
-      setLoadingSubscribers(false);
-      return;
-    }
-
-    // Ambil semua member dari cabang aktif
-    const { data: memberData, error: memberError } =
-      await supabase
-        .from("members")
-        .select(`
-        id,
-        name,
-        phone
-      `)
-        .eq("branch_id", branchId);
-
-    if (memberError) {
-      console.error(
-        "Gagal mengambil member:",
-        memberError
-      );
-      setSubscribers([]);
-      setLoadingSubscribers(false);
-      return;
-    }
-
-    // Gabungkan membership dengan data member
-    const subscribersData = (membershipData ?? []).map(
-      (membership) => {
-        const member = (memberData ?? []).find(
-          (member) =>
-            member.id === membership.member_id
-        );
-
-        return {
-          id: membership.id,
-          start_date: membership.start_date,
-          end_date: membership.end_date,
-          status: membership.status,
-          member: member
-            ? {
-              id: member.id,
-              name: member.name,
-              phone: member.phone,
-            }
-            : null,
-        };
+      if (!branchId) {
+        setPlans([]);
+        return;
       }
-    );
 
-    setSubscribers(subscribersData);
-    setLoadingSubscribers(false);
-  }
+      const { data, error } = await supabase
+        .from("membership_plans")
+        .select("id, name, duration, price, benefits, is_active")
+        .eq("branch_id", branchId)
+        .order("price", { ascending: true });
 
-  function handleOpenPlan(plan: MembershipPlan) {
-    setSelectedPlan(plan);
-    getSubscribers(plan.id);
-  }
+      if (error) {
+        console.error("Gagal mengambil paket membership:", error);
+        return;
+      }
 
-  function handleClosePlan() {
-    setSelectedPlan(null);
-    setSubscribers([]);
+      const plansWithCount = await Promise.all(
+        (data ?? []).map(async (plan) => {
+          const { count, error: countError } = await supabase
+            .from("memberships")
+            .select("*", {
+              count: "exact",
+              head: true,
+            })
+            .eq("plan_id", plan.id)
+            .eq("branch_id", branchId)
+            .eq("status", "active");
+
+          if (countError) {
+            console.error("Gagal menghitung member:", countError);
+          }
+
+          return {
+            ...plan,
+            benefits: plan.benefits ?? [],
+            memberCount: count ?? 0,
+          };
+        })
+      );
+
+      setPlans(plansWithCount);
+    } catch (error) {
+      console.error("Terjadi kesalahan:", error);
+    } finally {
+      setLoading(false);
+    }
   }
 
   async function handleAddMembership(
@@ -198,414 +147,442 @@ export default function MembershipPage() {
   ) {
     e.preventDefault();
 
-    if (!name || !duration || !price) {
-      alert("Nama, durasi, dan harga wajib diisi.");
+    // Validasi input wajib
+    if (!name.trim() || !duration || !price) {
+      showFeedback(
+        "Data Belum Lengkap",
+        "Nama, durasi, dan harga wajib diisi.",
+        "warning"
+      );
+      return;
+    }
+
+    const numericDuration = Number(duration);
+    const numericPrice = Number(price);
+
+    // Validasi durasi dan harga
+    if (
+      !Number.isInteger(numericDuration) ||
+      numericDuration <= 0 ||
+      !Number.isFinite(numericPrice) ||
+      numericPrice < 0
+    ) {
+      showFeedback(
+        "Data Tidak Valid",
+        "Durasi harus berupa bilangan bulat positif dan harga tidak boleh negatif.",
+        "warning"
+      );
       return;
     }
 
     setSaving(true);
 
-    const supabase = createClient();
+    try {
+      const branchId = await getActiveBranchId();
 
-    const branchId = getActiveBranchId();
+      if (!branchId) {
+        showFeedback(
+          "Cabang Tidak Ditemukan",
+          "Cabang aktif tidak ditemukan. Periksa pilihan cabang terlebih dahulu.",
+          "error"
+        );
+        return;
+      }
 
-    if (!branchId) {
-      alert("Cabang belum dipilih.");
+      const benefitList = benefits
+        .split("\n")
+        .map((item) => item.trim())
+        .filter(Boolean);
+
+      const { error } = await supabase
+        .from("membership_plans")
+        .insert({
+          name: name.trim(),
+          duration: numericDuration,
+          price: numericPrice,
+          benefits: benefitList,
+          branch_id: branchId,
+        });
+
+      if (error) {
+        console.error("Gagal menambahkan membership:", error);
+
+        showFeedback(
+          "Gagal Menyimpan",
+          "Paket membership gagal ditambahkan. Silakan coba kembali.",
+          "error"
+        );
+        return;
+      }
+
+      // Kosongkan form
+      setName("");
+      setDuration("");
+      setPrice("");
+      setBenefits("");
+      setIsFormOpen(false);
+      setCurrentPage(1);
+
+      // Perbarui daftar paket
+      await getPlans();
+
+      // Tampilkan notifikasi sukses
+      showFeedback(
+        "Membership Berhasil Ditambahkan",
+        "Paket membership baru berhasil disimpan.",
+        "success"
+      );
+    } catch (error) {
+      console.error("Terjadi kesalahan saat menyimpan membership:", error);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Terjadi kesalahan saat menyimpan paket membership. Silakan coba kembali.",
+        "error"
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    const benefitsArray = benefits
-      .split("\n")
-      .map((benefit) => benefit.trim())
-      .filter((benefit) => benefit !== "");
-
-    const { error } = await supabase
-      .from("membership_plans")
-      .insert({
-        name,
-        duration: Number(duration),
-        price: Number(price),
-        benefits: benefitsArray,
-        branch_id: branchId,
-      });
-
-    setSaving(false);
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    setName("");
-    setDuration("");
-    setPrice("");
-    setBenefits("");
-
-    setIsFormOpen(false);
-
-    getPlans();
   }
 
   useEffect(() => {
     getPlans();
   }, []);
 
-  if (loading) {
-    return (
-      <main className="min-h-screen bg-gray-100 p-8 text-black">
-        <p className="text-gray-500">
-          Memuat data membership...
-        </p>
-      </main>
-    );
-  }
+  const filteredPlans = plans.filter((plan) => {
+    const keyword = search.toLowerCase();
+    const benefitsText = (plan.benefits ?? []).join(" ");
+
+    const matchesSearch =
+      plan.name.toLowerCase().includes(keyword) ||
+      benefitsText.toLowerCase().includes(keyword);
+
+    const matchesDuration =
+      durationFilter === "all" ||
+      plan.duration.toString() === durationFilter;
+
+    return matchesSearch && matchesDuration;
+  });
+
+  const durationOptions = Array.from(
+    new Set(plans.map((plan) => plan.duration))
+  ).sort((a, b) => a - b);
+
+  const sortedPlans = [...filteredPlans].sort((a, b) => {
+    if (a.is_active !== b.is_active) {
+      return a.is_active ? -1 : 1;
+    }
+
+    return 0;
+  });
+
+  const totalPages = Math.ceil(
+    sortedPlans.length / ITEMS_PER_PAGE
+  );
+
+  const paginatedPlans = sortedPlans.slice(
+    (currentPage - 1) * ITEMS_PER_PAGE,
+    currentPage * ITEMS_PER_PAGE
+  );
 
   return (
-    <main className="min-h-screen bg-gray-100 p-8 text-black">
-      {/* Header */}
-      <div className="mb-8 flex items-end justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">
-            Membership
-          </h1>
+    <main className="flex min-h-[calc(100vh-64px)] flex-col p-5 sm:p-8">
+      {/* Header halaman */}
+      <div className="mb-8 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+        <div className="flex items-center gap-4">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+            <Users size={26} />
+          </div>
 
-          <p className="mt-1 text-sm text-gray-500">
-            Kelola paket membership yang tersedia di GymDesk.
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+              Membersip
+            </h1>
+
+            <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+              Kelola paket membership gym, mulai dari melihat durasi, harga, hingga memeriksa benefit serta jumlah member.
+            </p>
+          </div>
         </div>
 
+
         <button
+          type="button"
           onClick={() => setIsFormOpen(true)}
-          className="rounded-lg bg-black px-4 py-2 font-medium text-white"
+          className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
         >
-          + Tambah Membership
+          <IdCard size={18} />
+          Tambah Membership
         </button>
       </div>
 
-      {/* Membership Cards */}
-      {plans.length > 0 ? (
-        <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-          {plans.map((plan) => (
-            <button
-              key={plan.id}
-              onClick={() => handleOpenPlan(plan)}
-              className="rounded-xl bg-white p-6 text-left shadow transition hover:-translate-y-1 hover:shadow-lg"
-            >
-              <h2 className="text-xl font-bold">
-                {plan.name}
-              </h2>
+      {/* Pencarian dan filter */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="min-w-0 flex-1">
+          <Search
+            value={search}
+            onChange={(value) => {
+              setSearch(value);
+              setCurrentPage(1);
+            }}
+            placeholder="Cari paket membership..."
+          />
+        </div>
 
-              <div className="mt-4">
-                <span className="text-3xl font-bold">
-                  Rp{plan.price.toLocaleString("id-ID")}
-                </span>
+        <select
+          value={durationFilter}
+          onChange={(e) => {
+            setDurationFilter(e.target.value);
+            setCurrentPage(1);
+          }}
+          className="rounded-xl border border-zinc-300 bg-white px-4 py-3 text-sm text-zinc-700 outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+        >
+          <option value="all">Semua Durasi</option>
 
-                <span className="ml-1 text-sm text-gray-500">
-                  / {plan.duration} bulan
-                </span>
-              </div>
-
-              <div className="mt-6">
-                <p className="mb-3 text-sm font-semibold">
-                  Keuntungan
-                </p>
-
-                <ul className="space-y-2">
-                  {plan.benefits.length > 0 ? (
-                    plan.benefits.map((benefit, index) => (
-                      <li
-                        key={index}
-                        className="text-sm text-gray-600"
-                      >
-                        ✓ {benefit}
-                      </li>
-                    ))
-                  ) : (
-                    <li className="text-sm text-gray-400">
-                      Belum ada benefit.
-                    </li>
-                  )}
-                </ul>
-              </div>
-
-              <div className="mt-6 border-t pt-4">
-                <p className="text-sm text-gray-500">
-                  Member Aktif
-                </p>
-
-                <p className="mt-1 text-xl font-bold">
-                  {plan.memberCount} Member
-                </p>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Klik untuk melihat daftar member
-                </p>
-              </div>
-            </button>
+          {durationOptions.map((itemDuration) => (
+            <option key={itemDuration} value={itemDuration.toString()}>
+              {itemDuration} bulan
+            </option>
           ))}
-        </div>
-      ) : (
-        <div className="rounded-xl bg-white p-10 text-center shadow">
-          <p className="text-gray-500">
-            Belum ada paket membership.
-          </p>
-        </div>
-      )}
+        </select>
+      </div>
 
-      {/* Modal detail */}
-      {selectedPlan && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-xl bg-white p-6">
-            <div className="mb-6 flex items-start justify-between">
-              <div>
-                <h2 className="text-2xl font-bold">
-                  {selectedPlan.name}
-                </h2>
-
-                <p className="mt-1 text-sm text-gray-500">
-                  Rp
-                  {selectedPlan.price.toLocaleString("id-ID")}{" "}
-                  / {selectedPlan.duration} bulan
-                </p>
-              </div>
-
-              <button
-                onClick={handleClosePlan}
-                className="text-2xl text-gray-500 hover:text-black"
-              >
-                ×
-              </button>
-            </div>
-
-            <div>
-              <h3 className="text-lg font-bold">
-                Member yang berlangganan
-              </h3>
-
-              {loadingSubscribers ? (
-                <p className="mt-5 text-sm text-gray-500">
-                  Memuat data member...
-                </p>
-              ) : subscribers.length > 0 ? (
-                <div className="mt-4 overflow-x-auto rounded-lg border">
-                  <table className="w-full">
-                    <thead>
-                      <tr className="border-b bg-gray-50 text-left">
-                        <th className="px-4 py-3 text-sm font-semibold">
-                          Nama
-                        </th>
-
-                        <th className="px-4 py-3 text-sm font-semibold">
-                          No. HP
-                        </th>
-
-                        <th className="px-4 py-3 text-sm font-semibold">
-                          Mulai
-                        </th>
-
-                        <th className="px-4 py-3 text-sm font-semibold">
-                          Berakhir
-                        </th>
-
-                        <th className="px-4 py-3 text-sm font-semibold">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-
-                    <tbody>
-                      {subscribers.map((subscription) => (
-                        <tr
-                          key={subscription.id}
-                          className="border-b last:border-b-0"
-                        >
-                          <td className="px-4 py-3 font-medium">
-                            {subscription.member?.name ?? "-"}
-                          </td>
-
-                          <td className="px-4 py-3 text-gray-600">
-                            {subscription.member?.phone ?? "-"}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            {new Date(
-                              subscription.start_date
-                            ).toLocaleDateString("id-ID")}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            {new Date(
-                              subscription.end_date
-                            ).toLocaleDateString("id-ID")}
-                          </td>
-
-                          <td className="px-4 py-3">
-                            <span
-                              className={`rounded-full px-3 py-1 text-xs ${subscription.status === "active"
-                                  ? "bg-green-100 text-green-700"
-                                  : "bg-gray-100 text-gray-600"
-                                }`}
-                            >
-                              {subscription.status === "active"
-                                ? "Aktif"
-                                : "Tidak Aktif"}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="mt-4 rounded-lg bg-gray-50 p-8 text-center">
-                  <p className="text-sm text-gray-500">
-                    Belum ada member yang berlangganan paket ini.
-                  </p>
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={handleClosePlan}
-              className="mt-6 w-full rounded-lg border px-4 py-3 font-medium hover:bg-gray-50"
-            >
-              Tutup
-            </button>
+      {/* Daftar membership */}
+      <div className="flex flex-1 flex-col">
+        {loading ? (
+          <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center">
+            <p className="text-sm text-zinc-500">
+              Memuat data membership...
+            </p>
           </div>
-        </div>
-      )}
+        ) : filteredPlans.length > 0 ? (
+          <>
+            <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {paginatedPlans.map((plan) => (
+                <button
+                  key={plan.id}
+                  type="button"
+                  onClick={() => router.push(`/membership/${plan.id}`)}
+                  className="group flex h-full min-w-0 flex-col self-stretch overflow-hidden rounded-2xl border border-zinc-200 bg-white p-0 text-left shadow-sm transition duration-200 hover:border-orange-400 hover:shadow-lg focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                >
+                  {/* Header card */}
+                  <div className="relative isolate w-full shrink-0 overflow-hidden bg-zinc-900 p-5 text-white">
+                    <div className="pointer-events-none absolute -right-8 -top-10 -z-10 h-32 w-32 rounded-full bg-orange-500/20 blur-2xl" />
+
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex min-w-0 items-center gap-3">
+                        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-orange-600 shadow-md shadow-orange-950/30">
+                          <Dumbbell size={23} color="#FFFFFF" />
+                        </div>
+
+                        <div className="min-w-0">
+                          <h2 className="break-words text-lg font-bold text-white">
+                            {plan.name}
+                          </h2>
+
+                          <p className="mt-1 text-sm text-zinc-300">
+                            Paket membership
+                          </p>
+                        </div>
+                      </div>
+
+                      <span
+                        className={`inline-flex shrink-0 rounded-full px-3 py-1 text-xs font-bold ring-1 ${plan.is_active
+                          ? "bg-green-100 text-green-700 ring-green-400"
+                          : "bg-red-100 text-red-800 ring-red-300"
+                          }`}
+                      >
+                        {plan.is_active ? "Aktif" : "Nonaktif"}
+                      </span>
+                    </div>
+
+                    <div className="mt-6">
+                      <p className="break-words text-2xl font-extrabold tracking-tight text-white">
+                        Rp{plan.price.toLocaleString("id-ID")}
+                      </p>
+
+                      <div className="mt-2 flex items-center gap-1.5 text-sm text-zinc-300">
+                        <CalendarDays size={15} />
+                        <span>{plan.duration} bulan</span>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 h-1 w-16 rounded-full bg-orange-500 transition-all duration-200 group-hover:w-24" />
+                  </div>
+
+                  {/* Isi card */}
+                  <div className="flex w-full flex-1 flex-col p-5">
+                    {/* Jumlah member */}
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 px-4 py-3">
+                      <div className="flex min-w-0 items-center gap-2">
+                        <Users
+                          size={20}
+                          color="#C2410C"
+                          className="shrink-0"
+                        />
+
+                        <span className="text-sm font-medium text-zinc-700">
+                          Jumlah member
+                        </span>
+                      </div>
+
+                      <span className="shrink-0 text-sm font-bold text-orange-800">
+                        {plan.memberCount} member
+                      </span>
+                    </div>
+
+                    {/* Benefit */}
+                    <div className="mt-6">
+                      <h3 className="mb-4 text-sm font-bold text-zinc-900">
+                        Benefit Paket
+                      </h3>
+
+                      {plan.benefits.length > 0 ? (
+                        <>
+                          <ul className="space-y-3">
+                            {(expandedBenefits.includes(plan.id)
+                              ? plan.benefits
+                              : plan.benefits.slice(0, 3)
+                            ).map((benefit, index) => (
+                              <li
+                                key={`${plan.id}-benefit-${index}`}
+                                className="flex items-start gap-2.5"
+                              >
+                                <CheckCircle2
+                                  size={19}
+                                  color="#EA580C"
+                                  className="mt-0.5 shrink-0"
+                                />
+
+                                <span className="break-words text-sm leading-5 text-zinc-700">
+                                  {benefit}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+
+                          {plan.benefits.length > 3 && (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+
+                                setExpandedBenefits((current) =>
+                                  current.includes(plan.id)
+                                    ? current.filter((id) => id !== plan.id)
+                                    : [...current, plan.id]
+                                );
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+
+                                  setExpandedBenefits((current) =>
+                                    current.includes(plan.id)
+                                      ? current.filter((id) => id !== plan.id)
+                                      : [...current, plan.id]
+                                  );
+                                }
+                              }}
+                              className="mt-3 inline-block cursor-pointer text-xs font-bold text-orange-700 hover:text-orange-900"
+                            >
+                              {expandedBenefits.includes(plan.id)
+                                ? "Tampilkan lebih sedikit"
+                                : `Lihat ${plan.benefits.length - 3} benefit lainnya`}
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        <p className="text-sm italic text-zinc-500">
+                          Belum ada benefit yang ditambahkan.
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Tautan detail */}
+                    <div className="mt-auto flex items-center justify-between gap-3 border-t border-zinc-200 pt-5 mt-6">
+                      <span className="text-xs font-medium text-zinc-500 transition group-hover:text-orange-700">
+                        Lihat detail paket
+                      </span>
+
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 transition group-hover:bg-orange-100">
+                        <ArrowUpRight size={20} color="#EA580C" />
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="mt-auto pt-6">
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={filteredPlans.length}
+                itemsPerPage={ITEMS_PER_PAGE}
+                onPageChange={setCurrentPage}
+              />
+            </div>
+          </>
+        ) : (
+          <div className="rounded-2xl border border-dashed border-zinc-300 bg-white px-6 py-12 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-orange-50">
+              <Dumbbell size={27} color="#EA580C" />
+            </div>
+
+            <h2 className="mt-4 font-semibold text-zinc-900">
+              {search || durationFilter !== "all"
+                ? "Paket membership tidak ditemukan"
+                : "Belum ada paket membership"}
+            </h2>
+
+            <p className="mt-2 text-sm text-zinc-500">
+              {search || durationFilter !== "all"
+                ? "Coba ubah kata kunci atau filter durasi."
+                : "Tambahkan paket membership pertama untuk cabang ini."}
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Modal tambah membership */}
-      {isFormOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <div>
-                <h2 className="text-xl font-bold">
-                  Tambah Membership
-                </h2>
+      <AddMembershipModal
+        open={isFormOpen}
+        onClose={() => setIsFormOpen(false)}
+        name={name}
+        duration={duration}
+        price={price}
+        benefits={benefits}
+        saving={saving}
+        onNameChange={setName}
+        onDurationChange={setDuration}
+        onPriceChange={setPrice}
+        onBenefitsChange={setBenefits}
+        onSubmit={handleAddMembership}
+      />
 
-                <p className="mt-1 text-sm text-gray-500">
-                  Tambahkan paket membership baru.
-                </p>
-              </div>
-
-              <button
-                onClick={() => setIsFormOpen(false)}
-                className="text-2xl text-gray-500 hover:text-black"
-              >
-                ×
-              </button>
-            </div>
-
-            <form
-              onSubmit={handleAddMembership}
-              className="space-y-4"
-            >
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Nama Membership
-                </label>
-
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Contoh: Premium"
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Durasi
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    value={duration}
-                    onChange={(e) =>
-                      setDuration(e.target.value)
-                    }
-                    placeholder="3"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500"
-                  />
-
-                  <span className="text-sm text-gray-500">
-                    bulan
-                  </span>
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Harga
-                </label>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-gray-500">
-                    Rp
-                  </span>
-
-                  <input
-                    type="number"
-                    min="0"
-                    value={price}
-                    onChange={(e) =>
-                      setPrice(e.target.value)
-                    }
-                    placeholder="350000"
-                    className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-1 block text-sm font-medium">
-                  Keuntungan
-                </label>
-
-                <textarea
-                  value={benefits}
-                  onChange={(e) =>
-                    setBenefits(e.target.value)
-                  }
-                  placeholder={
-                    "Akses seluruh area gym\nFree locker\nKonsultasi trainer"
-                  }
-                  rows={5}
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 outline-none focus:border-orange-500"
-                />
-
-                <p className="mt-1 text-xs text-gray-500">
-                  Tulis satu keuntungan di setiap baris.
-                </p>
-              </div>
-
-              <div className="flex gap-3 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsFormOpen(false)}
-                  className="w-full rounded-lg border px-4 py-3 font-medium"
-                >
-                  Batal
-                </button>
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full rounded-lg bg-black px-4 py-3 font-medium text-white disabled:opacity-50"
-                >
-                  {saving ? "Menyimpan..." : "Simpan"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </main>
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={() =>
+          setFeedback((prev) => ({
+            ...prev,
+            open: false,
+          }))
+        }
+      />
+    </main >
+  );
+}
+export default function MembershipPage() {
+  return (
+    <Suspense fallback={<div className="p-6">Memuat membership...</div>}>
+      <MembershipContent />
+    </Suspense>
   );
 }

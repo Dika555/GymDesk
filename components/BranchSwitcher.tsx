@@ -26,7 +26,7 @@ export default function BranchSwitcher() {
       .order("name");
 
     if (error) {
-      console.error(error);
+      console.error("Gagal memuat data cabang.");
       alert("Gagal mengambil data cabang: " + error.message);
       return;
     }

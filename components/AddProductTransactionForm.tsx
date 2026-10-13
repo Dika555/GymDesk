@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import FeedbackModal from "@/components/FeedbackModal";
 
 type Product = {
   id: string;
@@ -20,10 +21,12 @@ type CartItem = {
 
 type Props = {
   onSuccess: () => void;
+  showSubmitButton: boolean;
 };
 
 export default function AddProductTransactionForm({
   onSuccess,
+  showSubmitButton,
 }: Props) {
   const supabase = createClient();
 
@@ -37,6 +40,7 @@ export default function AddProductTransactionForm({
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [saving, setSaving] = useState(false);
+  type FeedbackType = "success" | "error" | "warning" | "info";
 
   useEffect(() => {
     async function getData() {
@@ -68,6 +72,33 @@ export default function AddProductTransactionForm({
     getData();
   }, []);
 
+  const [feedback, setFeedback] = useState({
+    open: false,
+    title: "",
+    message: "",
+    type: "info" as FeedbackType,
+  });
+
+  function showFeedback(
+    title: string,
+    message: string,
+    type: FeedbackType = "info",
+  ) {
+    setFeedback({
+      open: true,
+      title,
+      message,
+      type,
+    });
+  }
+
+  function closeFeedback() {
+    setFeedback((prev) => ({
+      ...prev,
+      open: false,
+    }));
+  }
+
   function formatRupiah(value: number) {
     return new Intl.NumberFormat("id-ID", {
       style: "currency",
@@ -82,14 +113,22 @@ export default function AddProductTransactionForm({
     );
 
     if (!product) {
-      alert("Pilih produk terlebih dahulu.");
+      showFeedback(
+        "Produk Belum Dipilih",
+        "Pilih produk terlebih dahulu.",
+        "warning",
+      );
       return;
     }
 
     const qty = Number(quantity);
 
-    if (!qty || qty <= 0) {
-      alert("Jumlah produk harus lebih dari 0.");
+    if (!Number.isInteger(qty) || qty <= 0) {
+      showFeedback(
+        "Jumlah Tidak Valid",
+        "Jumlah produk harus berupa bilangan bulat lebih dari 0.",
+        "warning",
+      );
       return;
     }
 
@@ -102,24 +141,25 @@ export default function AddProductTransactionForm({
       : qty;
 
     if (newQuantity > product.stock) {
-      alert(`Stok ${product.name} hanya ${product.stock}.`);
+      showFeedback(
+        "Stok Tidak Mencukupi",
+        `Stok ${product.name} hanya ${product.stock}.`,
+        "warning",
+      );
       return;
     }
 
     if (existingItem) {
-      setCart(
-        cart.map((item) =>
+      setCart((prev) =>
+        prev.map((item) =>
           item.productId === product.id
-            ? {
-                ...item,
-                quantity: newQuantity,
-              }
+            ? { ...item, quantity: newQuantity }
             : item,
         ),
       );
     } else {
-      setCart([
-        ...cart,
+      setCart((prev) => [
+        ...prev,
         {
           productId: product.id,
           name: product.name,
@@ -162,15 +202,17 @@ export default function AddProductTransactionForm({
     e.preventDefault();
 
     if (!customerName.trim()) {
-      alert("Nama pelanggan harus diisi.");
+      showFeedback(
+        "Nama Belum Diisi",
+        "Nama pelanggan harus diisi.",
+        "warning",
+      );
       return;
     }
 
     let itemsToSave = [...cart];
 
-    // Jika ada produk yang sedang dipilih tetapi
-    // belum ditekan tombol Tambah, masukkan langsung
-    // ke transaksi.
+    // Masukkan produk yang masih dipilih tetapi belum ditambahkan.
     if (productId) {
       const product = products.find(
         (item) => item.id === productId,
@@ -179,12 +221,20 @@ export default function AddProductTransactionForm({
       const qty = Number(quantity);
 
       if (!product) {
-        alert("Produk tidak ditemukan.");
+        showFeedback(
+          "Produk Tidak Ditemukan",
+          "Silakan pilih produk yang tersedia.",
+          "warning",
+        );
         return;
       }
 
-      if (!qty || qty <= 0) {
-        alert("Jumlah produk harus lebih dari 0.");
+      if (!Number.isInteger(qty) || qty <= 0) {
+        showFeedback(
+          "Jumlah Tidak Valid",
+          "Jumlah produk harus berupa bilangan bulat lebih dari 0.",
+          "warning",
+        );
         return;
       }
 
@@ -197,17 +247,18 @@ export default function AddProductTransactionForm({
         : qty;
 
       if (newQuantity > product.stock) {
-        alert(`Stok ${product.name} hanya ${product.stock}.`);
+        showFeedback(
+          "Stok Tidak Mencukupi",
+          `Stok ${product.name} hanya ${product.stock}.`,
+          "warning",
+        );
         return;
       }
 
       if (existingItem) {
         itemsToSave = itemsToSave.map((item) =>
           item.productId === product.id
-            ? {
-                ...item,
-                quantity: newQuantity,
-              }
+            ? { ...item, quantity: newQuantity }
             : item,
         );
       } else {
@@ -221,52 +272,64 @@ export default function AddProductTransactionForm({
     }
 
     if (itemsToSave.length === 0) {
-      alert("Pilih produk terlebih dahulu.");
+      showFeedback(
+        "Produk Belum Dipilih",
+        "Pilih setidaknya satu produk untuk transaksi.",
+        "warning",
+      );
+      return;
+    }
+
+    const branchId = getActiveBranchId();
+
+    if (!branchId) {
+      showFeedback(
+        "Cabang Belum Dipilih",
+        "Pilih cabang aktif sebelum menyimpan transaksi.",
+        "warning",
+      );
       return;
     }
 
     setSaving(true);
 
-    const branchId = getActiveBranchId();
+    try {
+      const items = itemsToSave.map((item) => ({
+        product_id: item.productId,
+        quantity: item.quantity,
+      }));
 
-    if (!branchId) {
-      alert("Cabang aktif belum dipilih.");
-      setSaving(false);
-      return;
-    }
-
-    const items = itemsToSave.map((item) => ({
-      product_id: item.productId,
-      quantity: item.quantity,
-    }));
-
-    // Buat transaksi produk melalui RPC.
-    // RPC tetap menangani transaksi dan stok.
-    const { data: transactionId, error } =
-      await supabase.rpc(
-        "create_product_transaction",
-        {
+      const { data: transactionId, error } =
+        await supabase.rpc("create_product_transaction", {
           p_branch_id: branchId,
           p_member_id: null,
           p_payment_method: paymentMethod,
           p_notes: notes.trim() || null,
           p_items: items,
-        },
-      );
+        });
 
-    if (error) {
-      console.error(
-        "Gagal membuat transaksi:",
-        error,
-      );
-      alert(error.message);
-      setSaving(false);
-      return;
-    }
+      if (error) {
+        console.error("Gagal membuat transaksi:", error);
 
-    // Simpan nama pelanggan pada transaksi
-    const { error: customerNameError } =
-      await supabase
+        showFeedback(
+          "Transaksi Gagal",
+          error.message || "Transaksi produk gagal disimpan.",
+          "error",
+        );
+        return;
+      }
+
+      if (!transactionId) {
+        showFeedback(
+          "Transaksi Gagal",
+          "Transaksi tidak menghasilkan ID. Silakan periksa kembali data transaksi.",
+          "error",
+        );
+        return;
+      }
+
+      // Simpan nama pelanggan pada transaksi yang baru dibuat.
+      const { error: customerNameError } = await supabase
         .from("transactions")
         .update({
           customer_name: customerName.trim(),
@@ -274,238 +337,254 @@ export default function AddProductTransactionForm({
         .eq("id", transactionId)
         .eq("branch_id", branchId);
 
-    if (customerNameError) {
-      console.error(
-        "Transaksi berhasil dibuat, tetapi nama pelanggan gagal disimpan:",
-        customerNameError,
-      );
+      if (customerNameError) {
+        console.error(
+          "Transaksi berhasil dibuat, tetapi nama pelanggan gagal disimpan:",
+          customerNameError,
+        );
 
-      alert(
-        "Transaksi berhasil dibuat, tetapi nama pelanggan gagal disimpan: " +
-          customerNameError.message,
-      );
+        showFeedback(
+          "Nama Pelanggan Gagal Disimpan",
+          "Transaksi produk sudah dibuat, tetapi nama pelanggan gagal disimpan. Periksa kembali data transaksi sebelum mencoba menyimpan lagi.",
+          "error",
+        );
+        return;
+      }
 
+      // Bersihkan form setelah transaksi berhasil.
+      setCustomerName("");
+      setProductId("");
+      setQuantity("1");
+      setPaymentMethod("cash");
+      setNotes("");
+      setCart([]);
+
+      // Beri tahu halaman induk agar daftar transaksi diperbarui.
+      onSuccess();
+    } catch (error) {
+      console.error("Terjadi kesalahan saat menyimpan transaksi:", error);
+
+      showFeedback(
+        "Terjadi Kesalahan",
+        "Transaksi gagal diproses. Silakan coba lagi.",
+        "error",
+      );
+    } finally {
       setSaving(false);
-      return;
     }
-
-    alert("Transaksi berhasil disimpan.");
-
-    setCustomerName("");
-    setProductId("");
-    setQuantity("1");
-    setPaymentMethod("cash");
-    setNotes("");
-    setCart([]);
-    setSaving(false);
-
-    onSuccess();
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-5"
-    >
-      {/* Nama Pelanggan */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Nama Pelanggan
-        </label>
-
-        <input
-          type="text"
-          value={customerName}
-          onChange={(e) =>
-            setCustomerName(e.target.value)
-          }
-          placeholder="Masukkan nama pelanggan"
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        />
-
-        <p className="mt-1 text-xs text-zinc-500">
-          Masukkan nama pelanggan yang melakukan pembelian produk.
-        </p>
-      </div>
-
-      {/* Produk */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Produk
-        </label>
-
-        <div className="flex gap-2">
-          <select
-            value={productId}
-            onChange={(e) =>
-              setProductId(e.target.value)
-            }
-            className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-          >
-            <option value="">
-              Pilih produk
-            </option>
-
-            {products.map((product) => (
-              <option
-                key={product.id}
-                value={product.id}
-              >
-                {product.name} —{" "}
-                {formatRupiah(product.price)} — Stok{" "}
-                {product.stock}
-              </option>
-            ))}
-          </select>
+    <>
+      <form
+        id="add-transaction-form"
+        onSubmit={handleSubmit}
+        className="space-y-5"
+      >
+        {/* Nama Pelanggan */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Nama Pelanggan
+          </label>
 
           <input
-            type="number"
-            min="1"
-            value={quantity}
+            type="text"
+            value={customerName}
             onChange={(e) =>
-              setQuantity(e.target.value)
+              setCustomerName(e.target.value)
             }
-            className="w-20 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+            placeholder="Masukkan nama pelanggan"
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
           />
 
-          <button
-            type="button"
-            onClick={addToCart}
-            className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-800"
+          <p className="mt-1 text-xs text-zinc-500">
+            Masukkan nama pelanggan yang melakukan pembelian produk.
+          </p>
+        </div>
+
+        {/* Produk */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Produk
+          </label>
+
+          <div className="flex gap-2">
+            <select
+              value={productId}
+              onChange={(e) =>
+                setProductId(e.target.value)
+              }
+              className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+            >
+              <option value="">
+                Pilih produk
+              </option>
+
+              {products.map((product) => (
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.name} —{" "}
+                  {formatRupiah(product.price)} — Stok{" "}
+                  {product.stock}
+                </option>
+              ))}
+            </select>
+
+            <input
+              type="number"
+              min="1"
+              value={quantity}
+              onChange={(e) =>
+                setQuantity(e.target.value)
+              }
+              className="w-20 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+            />
+
+            <button
+              type="button"
+              onClick={addToCart}
+              className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-800"
+            >
+              Tambah
+            </button>
+          </div>
+        </div>
+
+        {/* Produk yang sedang dipilih */}
+        {cart.length === 0 && selectedProduct && (
+          <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-zinc-600">
+                Total
+              </span>
+
+              <span className="text-lg font-bold text-zinc-900">
+                {formatRupiah(total)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Keranjang */}
+        {cart.length > 0 && (
+          <div className="rounded-lg border border-zinc-200">
+            <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3">
+              <h3 className="text-sm font-semibold">
+                Detail Produk
+              </h3>
+            </div>
+
+            <div className="divide-y divide-zinc-100">
+              {cart.map((item) => (
+                <div
+                  key={item.productId}
+                  className="flex items-center justify-between px-4 py-3"
+                >
+                  <div>
+                    <p className="text-sm font-medium">
+                      {item.name}
+                    </p>
+
+                    <p className="text-xs text-zinc-500">
+                      {item.quantity} ×{" "}
+                      {formatRupiah(item.price)}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm font-medium">
+                      {formatRupiah(
+                        item.price * item.quantity,
+                      )}
+                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() =>
+                        removeFromCart(
+                          item.productId,
+                        )
+                      }
+                      className="text-sm text-red-500 hover:text-red-700"
+                    >
+                      Hapus
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-4">
+              <span className="font-semibold">
+                Total
+              </span>
+
+              <span className="text-lg font-bold">
+                {formatRupiah(total)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Pembayaran */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Metode Pembayaran
+          </label>
+
+          <select
+            value={paymentMethod}
+            onChange={(e) =>
+              setPaymentMethod(e.target.value)
+            }
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
           >
-            Tambah
+            <option value="cash">Cash</option>
+            <option value="qris">QRIS</option>
+            <option value="transfer">
+              Transfer
+            </option>
+          </select>
+        </div>
+
+        {/* Catatan */}
+        <div>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Catatan
+          </label>
+
+          <textarea
+            value={notes}
+            onChange={(e) =>
+              setNotes(e.target.value)
+            }
+            placeholder="Opsional"
+            rows={2}
+            className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
+          />
+        </div>
+
+        {/* Simpan */}
+        {showSubmitButton && (
+          <button
+            type="submit"
+            disabled={saving || !customerName.trim() || (!productId && cart.length === 0)}
+            className="..."
+          >
+            {saving ? "Menyimpan..." : "Simpan Transaksi"}
           </button>
-        </div>
-      </div>
+        )}
+      </form>
 
-      {/* Produk yang sedang dipilih */}
-      {cart.length === 0 && selectedProduct && (
-        <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-zinc-600">
-              Total
-            </span>
-
-            <span className="text-lg font-bold text-zinc-900">
-              {formatRupiah(total)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Keranjang */}
-      {cart.length > 0 && (
-        <div className="rounded-lg border border-zinc-200">
-          <div className="border-b border-zinc-200 bg-zinc-50 px-4 py-3">
-            <h3 className="text-sm font-semibold">
-              Detail Produk
-            </h3>
-          </div>
-
-          <div className="divide-y divide-zinc-100">
-            {cart.map((item) => (
-              <div
-                key={item.productId}
-                className="flex items-center justify-between px-4 py-3"
-              >
-                <div>
-                  <p className="text-sm font-medium">
-                    {item.name}
-                  </p>
-
-                  <p className="text-xs text-zinc-500">
-                    {item.quantity} ×{" "}
-                    {formatRupiah(item.price)}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-4">
-                  <span className="text-sm font-medium">
-                    {formatRupiah(
-                      item.price * item.quantity,
-                    )}
-                  </span>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      removeFromCart(
-                        item.productId,
-                      )
-                    }
-                    className="text-sm text-red-500 hover:text-red-700"
-                  >
-                    Hapus
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="flex items-center justify-between border-t border-zinc-200 px-4 py-4">
-            <span className="font-semibold">
-              Total
-            </span>
-
-            <span className="text-lg font-bold">
-              {formatRupiah(total)}
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Pembayaran */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Metode Pembayaran
-        </label>
-
-        <select
-          value={paymentMethod}
-          onChange={(e) =>
-            setPaymentMethod(e.target.value)
-          }
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        >
-          <option value="cash">Cash</option>
-          <option value="qris">QRIS</option>
-          <option value="transfer">
-            Transfer
-          </option>
-        </select>
-      </div>
-
-      {/* Catatan */}
-      <div>
-        <label className="mb-1 block text-sm font-medium text-zinc-700">
-          Catatan
-        </label>
-
-        <textarea
-          value={notes}
-          onChange={(e) =>
-            setNotes(e.target.value)
-          }
-          placeholder="Opsional"
-          rows={2}
-          className="w-full rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-        />
-      </div>
-
-      {/* Simpan */}
-      <button
-        type="submit"
-        disabled={
-          saving ||
-          !customerName.trim() ||
-          (!productId && cart.length === 0)
-        }
-        className="w-full rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {saving
-          ? "Menyimpan..."
-          : "Simpan Transaksi"}
-      </button>
-    </form>
+      <FeedbackModal
+        open={feedback.open}
+        title={feedback.title}
+        message={feedback.message}
+        type={feedback.type}
+        onClose={closeFeedback}
+      />
+    </>
   );
 }
