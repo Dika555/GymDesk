@@ -81,18 +81,7 @@ export default function ProfilePage() {
     });
   }
 
-  useEffect(() => {
-    async function loadData() {
-      await Promise.all([
-        loadProfile(),
-        loadBranchInfo(),
-      ]);
-    }
-
-    void loadData();
-  }, [loadProfile, loadBranchInfo]);
-
-  async function loadProfile() {
+  const loadProfile = useCallback(async () => {
     try {
       const {
         data: { user },
@@ -128,11 +117,12 @@ export default function ProfilePage() {
 
       showFeedback(
         "Gagal Memuat Profil",
-        "Informasi profil tidak dapat dimuat. Silakan coba lagi.",
+        "Informasi profil tidak dapat dimuat. Silakan muat ulang halaman.",
         "error"
       );
     }
-  }
+  }, [supabase]);
+
 
   async function handleSaveProfile(
     newName: string,
@@ -266,12 +256,15 @@ export default function ProfilePage() {
     }
   }
 
-  async function loadBranchInfo() {
+  const loadBranchInfo = useCallback(async () => {
     try {
       const branchId = getActiveBranchId();
 
       if (!branchId) {
         setBranchInfo(null);
+        setBranchName("");
+        setBranchAddress("");
+        setBranchPhone("");
         return;
       }
 
@@ -289,14 +282,20 @@ export default function ProfilePage() {
       setBranchPhone(data.phone ?? "");
     } catch (error) {
       console.error("Gagal memuat informasi gym:", error);
-
-      showFeedback(
-        "Gagal Memuat Informasi Gym",
-        "Informasi cabang tidak dapat dimuat.",
-        "error"
-      );
+      setBranchInfo(null);
     }
-  }
+  }, [supabase]);
+
+  useEffect(() => {
+    async function loadData() {
+      await Promise.all([
+        loadProfile(),
+        loadBranchInfo(),
+      ]);
+    }
+
+    void loadData();
+  }, [loadProfile, loadBranchInfo]);
 
   async function handleSaveBranch(
     newName: string,
