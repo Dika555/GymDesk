@@ -26,36 +26,43 @@ export default function BranchSwitcher() {
       .order("name");
 
     if (error) {
-      console.error("Gagal memuat data cabang.");
-      alert("Gagal mengambil data cabang: " + error.message);
+      console.error("Gagal memuat data cabang:", error.message);
       return;
     }
 
     const branchList = data ?? [];
-
     setBranches(branchList);
 
     const savedBranch = localStorage.getItem("activeBranchId");
 
-    if (
-      savedBranch &&
-      branchList.some((branch) => branch.id === savedBranch)
-    ) {
-      setSelectedBranch(savedBranch);
-    } else if (branchList.length > 0) {
-      setSelectedBranch(branchList[0].id);
-      localStorage.setItem("activeBranchId", branchList[0].id);
+    const validSavedBranch = branchList.find(
+      (branch) => branch.id === savedBranch
+    );
+
+    const activeBranch = validSavedBranch ?? branchList[0];
+
+    if (activeBranch) {
+      setSelectedBranch(activeBranch.id);
+
+      // Samakan pilihan cabang di localStorage dan cookie.
+      localStorage.setItem("activeBranchId", activeBranch.id);
+      document.cookie = `activeBranchId=${encodeURIComponent(
+        activeBranch.id
+      )}; path=/; max-age=31536000; samesite=lax`;
     }
   }
 
   function handleChange(branchId: string) {
-  setSelectedBranch(branchId);
-  localStorage.setItem("activeBranchId", branchId);
-  document.cookie = `activeBranchId=${branchId}; path=/`;
+    setSelectedBranch(branchId);
 
-  window.location.reload();
-}
+    localStorage.setItem("activeBranchId", branchId);
 
+    document.cookie = `activeBranchId=${encodeURIComponent(
+      branchId
+    )}; path=/; max-age=31536000; samesite=lax`;
+
+    window.location.reload();
+  }
 
   return (
     <select

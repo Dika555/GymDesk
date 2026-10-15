@@ -75,14 +75,26 @@ export default function AdminForm({
           Email
         </label>
 
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => onEmailChange(e.target.value)}
-          placeholder="admin@gmail.com"
-          className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 outline-none focus:border-orange-500"
-          required
-        />
+        {editingAdmin ? (
+          <>
+            <div className="w-full break-all rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-2.5 text-zinc-500">
+              {email || "-"}
+            </div>
+
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Email tidak dapat diubah setelah akun admin dibuat.
+            </p>
+          </>
+        ) : (
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => onEmailChange(e.target.value)}
+            placeholder="admin@gmail.com"
+            className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 outline-none focus:border-orange-500"
+            required
+          />
+        )}
       </div>
 
       {!editingAdmin && (

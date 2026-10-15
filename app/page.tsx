@@ -44,31 +44,35 @@ export default async function DashboardPage() {
   // DATA UNTUK GRAFIK KUNJUNGAN
   // =========================
 
-  const { data: visits } = await supabase
-    .from("visits")
-    .select("visit_date")
-    .eq("branch_id", branchId)
-    .gte("visit_date", startOfYear)
-    .lte("visit_date", today);
+  const [
+    { data: visits },
+    { data: recentMembers },
+    { data: recentVisits },
+    { data: recentMemberships },
+    { data: recentTransactions },
+    { data: recentTrainerSessions },
+    { data: recentStockMovements },
+  ] = await Promise.all([
+    // Data grafik kunjungan
+    supabase
+      .from("visits")
+      .select("visit_date")
+      .eq("branch_id", branchId)
+      .gte("visit_date", startOfYear)
+      .lte("visit_date", today),
 
-  // =========================
-  // MEMBER TERBARU
-  // =========================
+    // Member terbaru
+    supabase
+      .from("members")
+      .select("id, name, created_at")
+      .eq("branch_id", branchId)
+      .order("created_at", { ascending: false })
+      .limit(10),
 
-  const { data: recentMembers } = await supabase
-    .from("members")
-    .select("id, name, created_at")
-    .eq("branch_id", branchId)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  // =========================
-  // KUNJUNGAN TERBARU
-  // =========================
-
-  const { data: recentVisits } = await supabase
-    .from("visits")
-    .select(`
+    // Kunjungan terbaru
+    supabase
+      .from("visits")
+      .select(`
       id,
       member_id,
       visitor_name,
@@ -76,42 +80,30 @@ export default async function DashboardPage() {
       visit_fee,
       payment_method,
       created_at,
-      members (
-        name
-      )
+      members (name)
     `)
-    .eq("branch_id", branchId)
-    .order("created_at", { ascending: false })
-    .limit(10);
+      .eq("branch_id", branchId)
+      .order("created_at", { ascending: false })
+      .limit(10),
 
-  // =========================
-  // MEMBERSHIP TERBARU
-  // =========================
-
-  const { data: recentMemberships } = await supabase
-    .from("memberships")
-    .select(`
+    // Membership terbaru
+    supabase
+      .from("memberships")
+      .select(`
       id,
       member_id,
       created_at,
-      members (
-        name
-      ),
-      membership_plans (
-        name
-      )
+      members (name),
+      membership_plans (name)
     `)
-    .eq("branch_id", branchId)
-    .order("created_at", { ascending: false })
-    .limit(10);
+      .eq("branch_id", branchId)
+      .order("created_at", { ascending: false })
+      .limit(10),
 
-  // =========================
-  // TRANSAKSI TERBARU
-  // =========================
-
-  const { data: recentTransactions } = await supabase
-    .from("transactions")
-    .select(`
+    // Transaksi terbaru
+    supabase
+      .from("transactions")
+      .select(`
       id,
       member_id,
       transaction_type,
@@ -121,13 +113,44 @@ export default async function DashboardPage() {
       status,
       customer_name,
       notes,
-      members (
-        name
-      )
+      members (name)
     `)
-    .eq("branch_id", branchId)
-    .order("created_at", { ascending: false })
-    .limit(50);
+      .eq("branch_id", branchId)
+      .order("created_at", { ascending: false })
+      .limit(50),
+
+    // Sesi trainer terbaru
+    supabase
+      .from("trainer_sessions")
+      .select(`
+      id,
+      member_id,
+      visitor_name,
+      session_date,
+      price,
+      created_at,
+      transaction_id,
+      members (name)
+    `)
+      .order("created_at", { ascending: false })
+      .limit(10),
+
+    // Perubahan stok terbaru
+    supabase
+      .from("stock_movements")
+      .select(`
+      id,
+      product_id,
+      type,
+      quantity,
+      description,
+      created_at,
+      products (name)
+    `)
+      .eq("branch_id", branchId)
+      .order("created_at", { ascending: false })
+      .limit(10),
+  ]);
 
   // Transaksi pendaftaran member baru
   const registrationTransactions = (
@@ -136,57 +159,6 @@ export default async function DashboardPage() {
     (transaction) =>
       transaction.transaction_type === "registration"
   );
-
-  // =========================
-  // SESI TRAINER TERBARU
-  // =========================
-
-  const { data: recentTrainerSessions } = await supabase
-    .from("trainer_sessions")
-    .select(`
-      id,
-      member_id,
-      visitor_name,
-      session_date,
-      price,
-      created_at,
-      transaction_id,
-      members (
-        name
-      )
-    `)
-    .order("created_at", { ascending: false })
-    .limit(10);
-
-  // ID transaksi yang berasal dari sesi trainer.
-  // Digunakan supaya transaksi trainer tidak muncul
-  // dua kali di aktivitas Dashboard.
-  const trainerTransactionIds = new Set(
-    (recentTrainerSessions ?? [])
-      .map((session) => session.transaction_id)
-      .filter(Boolean)
-  );
-
-  // =========================
-  // PERUBAHAN STOK TERBARU
-  // =========================
-
-  const { data: recentStockMovements } = await supabase
-    .from("stock_movements")
-    .select(`
-      id,
-      product_id,
-      type,
-      quantity,
-      description,
-      created_at,
-      products (
-        name
-      )
-    `)
-    .eq("branch_id", branchId)
-    .order("created_at", { ascending: false })
-    .limit(10);
 
   // =========================
   // TIPE DATA AKTIVITAS

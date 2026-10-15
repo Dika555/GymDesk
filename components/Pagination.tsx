@@ -62,18 +62,21 @@ export default function Pagination({
   const pageNumbers = getPageNumbers();
 
   return (
-    <div className="mt-6 flex items-center justify-between">
+    <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      {/* Informasi jumlah data */}
       <p className="text-sm text-gray-600">
         Menampilkan {startItem}–{endItem} dari {totalItems} data
       </p>
 
+      {/* Navigasi halaman */}
       {totalPages > 1 && (
-        <div className="flex items-center gap-1">
+        <div className="flex flex-wrap items-center gap-1">
           {/* Tombol sebelumnya */}
           <button
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            aria-label="Halaman sebelumnya"
+            className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ←
           </button>
@@ -83,7 +86,7 @@ export default function Pagination({
             page === "..." ? (
               <span
                 key={`ellipsis-${index}`}
-                className="flex h-9 w-9 items-center justify-center text-gray-500"
+                className="flex h-9 w-7 shrink-0 items-center justify-center text-gray-500 sm:w-9"
               >
                 ...
               </span>
@@ -91,11 +94,11 @@ export default function Pagination({
               <button
                 key={page}
                 onClick={() => onPageChange(page as number)}
-                className={`flex h-9 w-9 items-center justify-center rounded-lg text-sm transition ${
-                  currentPage === page
+                aria-current={currentPage === page ? "page" : undefined}
+                className={`flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-sm transition sm:h-9 sm:w-9 ${currentPage === page
                     ? "bg-orange-500 text-white"
                     : "border border-gray-300 text-gray-600 hover:bg-gray-100"
-                }`}
+                  }`}
               >
                 {page}
               </button>
@@ -106,7 +109,8 @@ export default function Pagination({
           <button
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
-            className="flex h-9 w-9 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100"
+            aria-label="Halaman berikutnya"
+            className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             →
           </button>

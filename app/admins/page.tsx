@@ -208,19 +208,25 @@ export default function AdminsPage() {
     const trimmedName = name.trim();
     const trimmedEmail = email.trim();
 
-    if (!trimmedName || !trimmedEmail || !branchId) {
+    // Validasi data
+    if (
+      !trimmedName ||
+      !branchId ||
+      (!editingAdmin && !trimmedEmail)
+    ) {
       showFeedback(
         "Data Belum Lengkap",
-        "Nama, email, dan cabang wajib diisi.",
+        "Nama dan cabang wajib diisi. Email diperlukan untuk membuat admin baru.",
         "warning"
       );
       return;
     }
 
+    // Validasi password untuk admin baru
     if (!editingAdmin && password.length < 6) {
       showFeedback(
         "Password Tidak Valid",
-        "Password awal harus terdiri dari minimal 6 karakter.",
+        "Password awal minimal 6 karakter.",
         "warning"
       );
       return;
@@ -230,12 +236,11 @@ export default function AdminsPage() {
 
     try {
       if (editingAdmin) {
-        // Perbarui admin yang sudah ada.
+        // Edit admin: email tidak ikut diperbarui.
         const { error } = await supabase
           .from("users")
           .update({
             name: trimmedName,
-            email: trimmedEmail,
             branch_id: branchId,
           })
           .eq("id", editingAdmin.id)
@@ -243,6 +248,7 @@ export default function AdminsPage() {
 
         if (error) {
           console.error("Gagal memperbarui admin:", error);
+
           showFeedback(
             "Gagal Memperbarui Admin",
             error.message,
@@ -259,7 +265,7 @@ export default function AdminsPage() {
           "success"
         );
       } else {
-        // Buat akun admin melalui API server.
+        // Tambah admin: email tetap digunakan untuk membuat akun.
         const response = await fetch("/api/admins", {
           method: "POST",
           headers: {
@@ -295,7 +301,11 @@ export default function AdminsPage() {
 
       await loadData();
     } catch (error) {
-      console.error("Terjadi kesalahan saat menyimpan admin:", error);
+      console.error(
+        "Terjadi kesalahan saat menyimpan admin:",
+        error
+      );
+
       showFeedback(
         "Terjadi Kesalahan",
         "Admin gagal disimpan. Periksa koneksi lalu coba lagi.",
@@ -554,8 +564,8 @@ export default function AdminsPage() {
                           <td className="px-4 py-4">
                             <span
                               className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${admin.is_active
-                                  ? "bg-green-50 text-green-700 ring-green-200"
-                                  : "bg-red-50 text-red-700 ring-red-200"
+                                ? "bg-green-50 text-green-700 ring-green-200"
+                                : "bg-red-50 text-red-700 ring-red-200"
                                 }`}
                             >
                               {admin.is_active ? "Aktif" : "Nonaktif"}
@@ -578,8 +588,8 @@ export default function AdminsPage() {
                                 onClick={() => setConfirmAdmin(admin)}
                                 disabled={changingStatus !== null}
                                 className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${admin.is_active
-                                    ? "border-red-200 text-red-600 hover:bg-red-50"
-                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  ? "border-red-200 text-red-600 hover:bg-red-50"
+                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
                                   }`}
                               >
                                 {admin.is_active ? (
@@ -640,8 +650,8 @@ export default function AdminsPage() {
                 onClick={() => void handleToggleStatus()}
                 disabled={changingStatus !== null}
                 className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${confirmAdmin.is_active
-                    ? "bg-red-600 hover:bg-red-700"
-                    : "bg-emerald-600 hover:bg-emerald-700"
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
                   }`}
               >
                 {changingStatus

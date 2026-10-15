@@ -6,7 +6,8 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import {
-  X
+  X,
+  LogOut,
 } from "lucide-react";
 
 const menuItems = [
@@ -31,6 +32,8 @@ export default function Sidebar() {
 
   const [role, setRole] = useState<string | null>(null);
   const [isOpen, setIsOpen] = useState(false);
+  const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
@@ -98,48 +101,65 @@ export default function Sidebar() {
   }, []);
 
   async function handleLogout() {
-    const supabase = createClient();
+    if (isLoggingOut) return;
 
-    await supabase.auth.signOut();
+    setIsLoggingOut(true);
 
-    setRole(null);
-    router.push("/login");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signOut();
+
+      if (error) throw error;
+
+      setRole(null);
+      setIsLogoutModalOpen(false);
+      setIsOpen(false);
+
+      router.replace("/login");
+      router.refresh();
+    } catch (error) {
+      console.error("Gagal logout:", error);
+
+      alert("Logout gagal. Silakan coba lagi.");
+    } finally {
+      setIsLoggingOut(false);
+    }
   }
 
   return (
     <>
       <aside
-        className={`fixed left-0 top-0 z-50 flex h-screen w-64 flex-col bg-black text-white transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"
+        className={`fixed left-0 top-0 z-50 flex h-dvh w-64 flex-col bg-black text-white transition-transform duration-300 lg:translate-x-0 ${isOpen ? "translate-x-0" : "-translate-x-full"
           }`}
       >
 
         {/* Header Sidebar */}
-<div className="relative flex h-20 shrink-0 items-center justify-center border-b border-zinc-800 px-12">
-  {/* Logo */}
-  <Link href="/" className="flex items-center justify-center">
-    <Image
-      src="/logo-GymDesk.svg"
-      alt="GymDesk"
-      width={160}
-      height={50}
-      priority
-      className="h-auto w-40"
-    />
-  </Link>
+        <div className="relative flex h-16 shrink-0 items-center justify-center border-b border-zinc-800 px-12 lg:h-20">
+          {/* Logo */}
+          <Link href="/" className="flex items-center justify-center">
+            <Image
+              src="/logo-GymDesk.svg"
+              alt="GymDesk"
+              width={160}
+              height={50}
+              priority
+              className="h-auto w-40"
+            />
+          </Link>
 
-  {/* Tombol Tutup Mobile */}
-  <button
-    type="button"
-    onClick={() => setIsOpen(false)}
-    className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-white lg:hidden"
-    aria-label="Tutup menu"
-  >
-    <X size={22} />
-  </button>
-</div>
+          {/* Tombol Tutup Mobile */}
+          <button
+            type="button"
+            onClick={() => setIsOpen(false)}
+            className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-lg text-zinc-400 transition-colors hover:bg-zinc-900 hover:text-white lg:hidden"
+            aria-label="Tutup menu"
+          >
+            <X size={22} />
+          </button>
+        </div>
 
         {/* Menu */}
-        <nav className="flex-1 px-4 py-6">
+        <nav className="min-h-0 flex-1 overflow-y-hidden px-3 py-3 lg:px-4 lg:py-6">
           <div className="space-y-1">
 
             {menuItems.map((item) => {
@@ -149,7 +169,7 @@ export default function Sidebar() {
                 <Link
                   key={item.href}
                   href={item.href}
-                  className={`block rounded-lg px-4 py-3 text-sm font-medium transition ${isActive
+                  className={`block rounded-lg px-4 py-2.5 text-sm font-medium transition lg:px-4 lg:py-3 ${isActive
                     ? "bg-orange-500 text-white"
                     : "text-zinc-400 hover:bg-zinc-900 hover:text-white"
                     }`}
@@ -161,7 +181,7 @@ export default function Sidebar() {
 
             {/* Menu khusus Super Admin */}
             {role === "super_admin" && (
-              <div className="mt-6 border-t border-zinc-800 pt-4">
+              <div className="mt-4 border-t border-zinc-800 pt-3 lg:mt-6 lg:pt-4">
                 <p className="mb-2 px-4 text-xs font-semibold uppercase tracking-wider text-zinc-500">
                   Super Admin
                 </p>
@@ -192,13 +212,72 @@ export default function Sidebar() {
         {/* Logout */}
         <div className="border-t border-zinc-800 p-4">
           <button
-            onClick={handleLogout}
-            className="w-full rounded-lg px-4 py-3 text-left text-sm font-medium text-zinc-400 transition hover:bg-zinc-900 hover:text-white"
+            type="button"
+            onClick={() => setIsLogoutModalOpen(true)}
+            className="w-full rounded-lg px-4 py-2.5 text-left text-sm font-medium text-zinc-400 transition hover:bg-zinc-900 hover:text-white lg:px-4 lg:py-3"
           >
             Logout
           </button>
         </div>
       </aside>
+
+      {/* Konfirmasi Logout */}
+      {isLogoutModalOpen && (
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !isLoggingOut) {
+              setIsLogoutModalOpen(false);
+            }
+          }}
+        >
+          <div
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            aria-describedby="logout-description"
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+          >
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+              <LogOut size={23} />
+            </div>
+
+            <h2
+              id="logout-title"
+              className="text-lg font-bold text-zinc-900"
+            >
+              Konfirmasi Logout
+            </h2>
+
+            <p
+              id="logout-description"
+              className="mt-2 text-sm leading-6 text-zinc-600"
+            >
+              Apakah kamu yakin ingin keluar dari akun GymDesk?
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsLogoutModalOpen(false)}
+                disabled={isLoggingOut}
+                className="rounded-lg border border-zinc-300 px-4 py-2.5 text-sm font-semibold text-zinc-700 transition hover:bg-zinc-50 disabled:opacity-50"
+              >
+                Batal
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={isLoggingOut}
+                className="rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isLoggingOut ? "Memproses..." : "Ya, Logout"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {isOpen && (
         <div

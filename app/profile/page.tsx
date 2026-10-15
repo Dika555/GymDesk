@@ -21,6 +21,7 @@ type UserProfile = {
   phone: string;
   role: string;
   avatar_url: string | null;
+  branch_id: string | null;
 };
 
 type FeedbackType = "success" | "error" | "warning" | "info";
@@ -43,9 +44,9 @@ export default function ProfilePage() {
   const supabase = useMemo(() => createClient(), []);
 
   const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [assignedBranchName, setAssignedBranchName] = useState("");
 
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [avatarUrl, setAvatarUrl] = useState("");
 
@@ -101,7 +102,7 @@ export default function ProfilePage() {
 
       const { data, error } = await supabase
         .from("users")
-        .select("id, name, email, phone, role, avatar_url")
+        .select("id, name, email, phone, role, avatar_url, branch_id")
         .eq("id", user.id)
         .single();
 
@@ -109,7 +110,6 @@ export default function ProfilePage() {
 
       setProfile(data);
       setName(data.name ?? "");
-      setEmail(data.email ?? "");
       setPhone(data.phone ?? "");
       setAvatarUrl(data.avatar_url ?? "");
     } catch (error) {
@@ -126,7 +126,6 @@ export default function ProfilePage() {
 
   async function handleSaveProfile(
     newName: string,
-    newEmail: string,
     newPhone: string,
     file: File | null
   ) {
@@ -140,13 +139,12 @@ export default function ProfilePage() {
     }
 
     const trimmedName = newName.trim();
-    const trimmedEmail = newEmail.trim();
     const trimmedPhone = newPhone.trim();
 
-    if (!trimmedName || !trimmedEmail) {
+    if (!trimmedName) {
       showFeedback(
         "Data Belum Lengkap",
-        "Nama dan email wajib diisi.",
+        "Nama wajib diisi.",
         "warning"
       );
       return;
@@ -171,21 +169,10 @@ export default function ProfilePage() {
         return;
       }
 
-      // Memperbarui email autentikasi jika berubah.
-      if (trimmedEmail !== profile.email) {
-        const { error } = await supabase.auth.updateUser({
-          email: trimmedEmail,
-        });
-
-        if (error) throw error;
-      }
-
-      // Gunakan foto lama jika tidak memilih foto baru.
       let newAvatarUrl = avatarUrl;
 
       if (file) {
         const fileExtension = file.name.split(".").pop();
-
         const filePath = `${user.id}/${crypto.randomUUID()}.${fileExtension}`;
 
         const { error: uploadError } = await supabase.storage
@@ -209,7 +196,6 @@ export default function ProfilePage() {
         .from("users")
         .update({
           name: trimmedName,
-          email: trimmedEmail,
           phone: trimmedPhone,
           avatar_url: newAvatarUrl,
         })
@@ -217,23 +203,19 @@ export default function ProfilePage() {
 
       if (userError) throw userError;
 
-      // Perbarui data pada halaman.
       const updatedProfile: UserProfile = {
         ...profile,
         name: trimmedName,
-        email: trimmedEmail,
         phone: trimmedPhone,
         avatar_url: newAvatarUrl,
       };
 
       setProfile(updatedProfile);
       setName(trimmedName);
-      setEmail(trimmedEmail);
       setPhone(trimmedPhone);
       setAvatarUrl(newAvatarUrl);
 
       window.dispatchEvent(new Event("profile-updated"));
-
       setIsProfileModalOpen(false);
 
       showFeedback(
@@ -255,6 +237,51 @@ export default function ProfilePage() {
       setSavingProfile(false);
     }
   }
+
+  const loadAssignedBranch = useCallback(async () => {
+    try {
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+
+      if (!user) return;
+
+      const { data: userData, error: userError } = await supabase
+        .from("users")
+        .select("branch_id, role")
+        .eq("id", user.id)
+        .single();
+
+      if (userError) throw userError;
+
+      // Super Admin tidak harus terikat pada satu cabang.
+      if (userData.role === "super_admin") {
+        setAssignedBranchName("Semua Cabang");
+        return;
+      }
+
+      if (!userData.branch_id) {
+        setAssignedBranchName("Belum ditetapkan");
+        return;
+      }
+
+      const { data: branch, error: branchError } = await supabase
+        .from("branches")
+        .select("name")
+        .eq("id", userData.branch_id)
+        .single();
+
+      if (branchError) throw branchError;
+
+      setAssignedBranchName(branch.name ?? "Belum ditetapkan");
+    } catch (error) {
+      console.error("Gagal memuat cabang akun:", error);
+      setAssignedBranchName("Gagal memuat cabang");
+    }
+  }, [supabase]);
 
   const loadBranchInfo = useCallback(async () => {
     try {
@@ -291,11 +318,12 @@ export default function ProfilePage() {
       await Promise.all([
         loadProfile(),
         loadBranchInfo(),
+        loadAssignedBranch(),
       ]);
     }
 
     void loadData();
-  }, [loadProfile, loadBranchInfo]);
+  }, [loadProfile, loadBranchInfo, loadAssignedBranch]);
 
   async function handleSaveBranch(
     newName: string,
@@ -442,7 +470,7 @@ export default function ProfilePage() {
                 </h3>
 
                 <p className="mt-1 break-all text-sm text-zinc-600">
-                  {email || "- Email"}
+                  {profile?.email ?? ""}
                 </p>
 
                 <p className="mt-1 text-sm text-zinc-600">
@@ -489,7 +517,7 @@ export default function ProfilePage() {
                     Cabang
                   </div>
                   <p className="mt-2 break-words text-base font-semibold text-zinc-900">
-                    {branchInfo?.name ?? "Belum ada cabang"}
+                    {assignedBranchName || "Belum ditetapkan"}
                   </p>
                 </div>
               </div>
@@ -562,7 +590,7 @@ export default function ProfilePage() {
       <ProfileEditModal
         open={isProfileModalOpen}
         name={name}
-        email={email}
+        email={profile?.email ?? ""}
         phone={phone}
         avatarUrl={avatarUrl}
         saving={savingProfile}

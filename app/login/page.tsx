@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import LoadingScreen from "@/components/LoadingScreen";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +15,14 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
+  if (loading) {
+    return (
+      <LoadingScreen
+        title="Memproses Login"
+        description="Sedang memverifikasi akun kamu..."
+      />
+    );
+  }
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

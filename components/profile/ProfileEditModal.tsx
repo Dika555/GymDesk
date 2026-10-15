@@ -15,7 +15,6 @@ type ProfileEditModalProps = {
   onClose: () => void;
   onSave: (
     name: string,
-    email: string,
     phone: string,
     file: File | null
   ) => void;
@@ -38,18 +37,16 @@ export default function ProfileEditModal({
   onFeedback,
 }: ProfileEditModalProps) {
   const [newName, setNewName] = useState(name);
-  const [newEmail, setNewEmail] = useState(email);
   const [newPhone, setNewPhone] = useState(phone);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState(avatarUrl);
 
   useEffect(() => {
     setNewName(name);
-    setNewEmail(email);
     setNewPhone(phone);
     setSelectedFile(null);
     setPreviewUrl(avatarUrl);
-  }, [name, email, phone, avatarUrl, open]);
+  }, [name, phone, avatarUrl, open]);
 
   function handleFileChange(
     event: React.ChangeEvent<HTMLInputElement>
@@ -105,7 +102,6 @@ export default function ProfileEditModal({
             onClick={() =>
               onSave(
                 newName,
-                newEmail,
                 newPhone,
                 selectedFile
               )
@@ -170,13 +166,13 @@ export default function ProfileEditModal({
             Email
           </label>
 
-          <input
-            type="email"
-            value={newEmail}
-            onChange={(e) => setNewEmail(e.target.value)}
-            disabled={saving}
-            className="w-full rounded-lg border border-zinc-300 px-4 py-3 outline-none focus:border-orange-500 disabled:bg-zinc-50"
-          />
+          <div className="w-full break-all rounded-lg border border-zinc-200 bg-zinc-50 px-4 py-3 text-zinc-500">
+            {email || "-"}
+          </div>
+
+          <p className="mt-1 text-xs text-zinc-400">
+            Email digunakan untuk login dan tidak dapat diubah.
+          </p>
         </div>
 
         <div>
