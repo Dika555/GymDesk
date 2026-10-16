@@ -58,8 +58,9 @@ export default function RecentActivity({ activities }: Props) {
     }
   }
 
+
   return (
-    <div className="mt-6 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
+    <div className="mt-6 min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-zinc-900">
           Aktivitas Terbaru
@@ -75,94 +76,73 @@ export default function RecentActivity({ activities }: Props) {
           Belum ada aktivitas.
         </p>
       ) : (
-        <div className="w-full min-w-0 rounded-xl border border-zinc-200">
-          <div className="w-full min-w-0 overflow-x-auto">
-            <div className="min-w-[650px]">
-              <table className="w-full table-fixed">
-                <colgroup>
-                  <col className="w-[8%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[25%]" />
-                  <col className="w-[24%]" />
-                  <col className="w-[25%]" />
-                </colgroup>
+        <div className="max-h-60 w-full min-w-0 overflow-auto rounded-xl border border-zinc-200">
+          <table className="w-full min-w-[650px] table-fixed">
+            <colgroup>
+              <col className="w-[8%]" />
+              <col className="w-[18%]" />
+              <col className="w-[25%]" />
+              <col className="w-[24%]" />
+              <col className="w-[25%]" />
+            </colgroup>
 
-                <thead className="border-b border-zinc-300 bg-zinc-100">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                      No.
-                    </th>
+            <thead className="sticky top-0 z-10 border-b border-zinc-300 bg-zinc-100">
+              <tr>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                  No.
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                  Waktu
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                  Aktivitas
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                  Nama / Detail
+                </th>
+                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-600">
+                  Nilai
+                </th>
+              </tr>
+            </thead>
 
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                      Waktu
-                    </th>
+            <tbody>
+              {activities.map((activity, index) => (
+                <tr
+                  key={activity.id}
+                  className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
+                >
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
+                    {index + 1}
+                  </td>
 
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                      Aktivitas
-                    </th>
+                  <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
+                    {formatDate(activity.created_at)}
+                  </td>
 
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                      Nama / Detail
-                    </th>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500">
+                        {getActivityIcon(activity.type)}
+                      </div>
 
-                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-600">
-                      Nilai
-                    </th>
-                  </tr>
-                </thead>
-              </table>
+                      <span className="text-sm font-medium text-zinc-900">
+                        {activity.detail}
+                      </span>
+                    </div>
+                  </td>
 
-              {/* Body tabel: scroll vertikal hanya di bagian ini */}
-              <div className="max-h-60 overflow-y-auto overflow-x-hidden">
-                <table className="w-full table-fixed">
-                  <colgroup>
-                    <col className="w-[8%]" />
-                    <col className="w-[18%]" />
-                    <col className="w-[25%]" />
-                    <col className="w-[24%]" />
-                    <col className="w-[25%]" />
-                  </colgroup>
+                  <td className="px-4 py-3 text-sm text-zinc-700">
+                    {activity.name}
+                  </td>
 
-                  <tbody>
-                    {activities.map((activity, index) => (
-                      <tr
-                        key={activity.id}
-                        className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
-                      >
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
-                          {index + 1}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
-                          {formatDate(activity.created_at)}
-                        </td>
-
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500">
-                              {getActivityIcon(activity.type)}
-                            </div>
-
-                            <span className="text-sm font-medium text-zinc-900">
-                              {activity.detail}
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="px-4 py-3 text-sm text-zinc-700">
-                          {activity.name}
-                        </td>
-
-                        <td className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-zinc-900">
-                          {activity.value}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
+                  <td className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-zinc-900">
+                    {activity.value}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
     </div>
