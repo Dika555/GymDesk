@@ -428,7 +428,7 @@ export default function AdminsPage() {
           disabled={!authorized || loading}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          <ShieldCheck size={18} />
+          <ShieldCheck size={18} />+
           Tambah Admin
         </button>
       </div>
@@ -573,7 +573,7 @@ export default function AdminsPage() {
                           </td>
 
                           <td className="px-4 py-4">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex justify-start gap-2">
                               <button
                                 type="button"
                                 onClick={() => openEditForm(admin)}

@@ -200,7 +200,7 @@ export default function VisitsPage() {
 
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-              Riwayat Kunjungan
+              Kunjungan
             </h1>
 
             <p className="mt-1 text-sm text-zinc-500 sm:text-base">

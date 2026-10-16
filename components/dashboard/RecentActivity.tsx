@@ -1,3 +1,5 @@
+"use client";
+
 import {
   UserPlus,
   CreditCard,
@@ -26,10 +28,7 @@ type Props = {
   activities: Activity[];
 };
 
-export default function RecentActivity({
-  activities,
-}: Props) {
-
+export default function RecentActivity({ activities }: Props) {
   function formatDate(date: string) {
     return new Date(date).toLocaleString("id-ID", {
       day: "2-digit",
@@ -44,22 +43,16 @@ export default function RecentActivity({
     switch (type) {
       case "member":
         return <UserPlus size={18} />;
-
       case "membership":
         return <CreditCard size={18} />;
-
       case "visit":
         return <Footprints size={18} />;
-
       case "transaction":
         return <Receipt size={18} />;
-
       case "trainer":
         return <Dumbbell size={18} />;
-
       case "inventory":
         return <Package size={18} />;
-
       default:
         return null;
     }
@@ -83,85 +76,94 @@ export default function RecentActivity({
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200">
-          <table className="w-full min-w-[650px] table-fixed">
-            <colgroup>
-            <col className="w-[8%]" />
-            <col className="w-[18%]" />
-            <col className="w-[25%]" />
-            <col className="w-[24%]" />
-            <col className="w-[25%]" />
-            </colgroup>
-            <thead className="sticky top-0 z-10 border-b border-zinc-300 bg-zinc-100">
-              <tr className="border-b border-zinc-200 last:border-b-0">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  No.
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Waktu
-                </th>
+          {/* Scroll horizontal untuk header dan body */}
+          <div className="overflow-x-auto">
+            <div className="min-w-[650px]">
+              {/* Header tabel: tidak ikut scroll vertikal */}
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[8%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[25%]" />
+                  <col className="w-[24%]" />
+                  <col className="w-[25%]" />
+                </colgroup>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Aktivitas
-                </th>
+                <thead className="border-b border-zinc-300 bg-zinc-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      No.
+                    </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Nama / Detail
-                </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Waktu
+                    </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-600">
-                  Nilai
-                </th>
-              </tr>
-            </thead>
-          </table>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Aktivitas
+                    </th>
 
-          <div className="max-h-60 overflow-y-auto">
-            <table className="w-full min-w-[650px] table-fixed">
-              <colgroup>
-              <col className="w-[8%]" />
-              <col className="w-[18%]" />
-              <col className="w-[25%]" />
-              <col className="w-[24%]" />
-              <col className="w-[25%]" />
-              </colgroup>
-              <tbody>
-                {activities.map((activity, index) => (
-                  <tr
-                    key={activity.id}
-                    className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
-                  >
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Nama / Detail
+                    </th>
 
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
-                      {index + 1}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
-                      {formatDate(activity.created_at)}
-                    </td>
-
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500">
-                          {getActivityIcon(activity.type)}
-                        </div>
-
-                        <span className="text-sm font-medium text-zinc-900">
-                          {activity.detail}
-                        </span>
-                      </div>
-                    </td>
-
-                    <td className="px-4 py-3 text-sm text-zinc-700">
-                      {activity.name}
-                    </td>
-
-                    <td className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-zinc-900">
-                      {activity.value}
-                    </td>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-600">
+                      Nilai
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+              </table>
+
+              {/* Body tabel: scroll vertikal hanya di bagian ini */}
+              <div className="max-h-60 overflow-y-auto">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[8%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[25%]" />
+                    <col className="w-[24%]" />
+                    <col className="w-[25%]" />
+                  </colgroup>
+
+                  <tbody>
+                    {activities.map((activity, index) => (
+                      <tr
+                        key={activity.id}
+                        className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
+                      >
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
+                          {index + 1}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-zinc-700">
+                          {formatDate(activity.created_at)}
+                        </td>
+
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500">
+                              {getActivityIcon(activity.type)}
+                            </div>
+
+                            <span className="text-sm font-medium text-zinc-900">
+                              {activity.detail}
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="px-4 py-3 text-sm text-zinc-700">
+                          {activity.name}
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-left text-sm font-medium text-zinc-900">
+                          {activity.value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
       )}

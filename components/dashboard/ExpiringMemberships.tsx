@@ -32,12 +32,9 @@ export default function ExpiringMemberships({
     today.setHours(0, 0, 0, 0);
     endDate.setHours(0, 0, 0, 0);
 
-    const difference =
-      endDate.getTime() - today.getTime();
+    const difference = endDate.getTime() - today.getTime();
 
-    return Math.ceil(
-      difference / (1000 * 60 * 60 * 24)
-    );
+    return Math.ceil(difference / (1000 * 60 * 60 * 24));
   }
 
   return (
@@ -58,103 +55,105 @@ export default function ExpiringMemberships({
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-zinc-200">
-          <table className="w-full min-w-[650px] table-fixed">
-            <colgroup>
-              <col className="w-[8%]" />
-              <col className="w-[27%]" />
-              <col className="w-[23%]" />
-              <col className="w-[22%]" />
-              <col className="w-[20%]" />
-            </colgroup>
+          <div className="overflow-x-auto">
+            <div className="min-w-[650px]">
+              <table className="w-full table-fixed">
+                <colgroup>
+                  <col className="w-[8%]" />
+                  <col className="w-[27%]" />
+                  <col className="w-[23%]" />
+                  <col className="w-[22%]" />
+                  <col className="w-[20%]" />
+                </colgroup>
 
-            <thead className="sticky top-0 z-10 border-b border-zinc-300 bg-zinc-100">
-              <tr className="bg-zinc-100">
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  No.
-                </th>
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Member
-                </th>
+                <thead className="border-b border-zinc-300 bg-zinc-100">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      No.
+                    </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Paket
-                </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Member
+                    </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Berakhir
-                </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Paket
+                    </th>
 
-                <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
-                  Sisa
-                </th>
-              </tr>
-            </thead>
-          </table>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Berakhir
+                    </th>
 
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-zinc-700">
+                      Sisa
+                    </th>
+                  </tr>
+                </thead>
+              </table>
 
-          <div className="max-h-56 overflow-y-auto">
-            <table className="w-full min-w-[650px] table-fixed">
-              <colgroup>
-                <col className="w-[8%]" />
-                <col className="w-[27%]" />
-                <col className="w-[23%]" />
-                <col className="w-[22%]" />
-                <col className="w-[20%]" />
-              </colgroup>
+              {/* Body tabel: scroll vertikal hanya di bagian ini */}
+              <div className="max-h-56 overflow-y-auto">
+                <table className="w-full table-fixed">
+                  <colgroup>
+                    <col className="w-[8%]" />
+                    <col className="w-[27%]" />
+                    <col className="w-[23%]" />
+                    <col className="w-[22%]" />
+                    <col className="w-[20%]" />
+                  </colgroup>
 
-              <tbody>
-                {memberships.map((membership, index) => {
-                  const remainingDays =
-                    getRemainingDays(
-                      membership.end_date
-                    );
+                  <tbody>
+                    {memberships.map((membership, index) => {
+                      const remainingDays = getRemainingDays(
+                        membership.end_date
+                      );
 
-                  return (
-                    <tr
-                      key={membership.id}
-                      className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
-                    >
-                      <td className="px-4 py-4 text-sm font-medium text-zinc-900">
-                        {index + 1}
-                      </td>
-                      <td className="px-4 py-4 text-sm font-medium text-zinc-900">
-                        {membership.members?.name ?? "—"}
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-zinc-700">
-                        {membership.membership_plans?.name ?? "—"}
-                      </td>
-
-                      <td className="px-4 py-4 text-sm text-zinc-700">
-                        {formatDate(
-                          membership.end_date
-                        )}
-                      </td>
-
-                      <td className="px-4 py-4">
-                        <span
-                          className={
-                            remainingDays <= 0
-                              ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800"
-                              : remainingDays <= 7
-                                ? "rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800"
-                                : "rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-800"
-                          }
+                      return (
+                        <tr
+                          key={membership.id}
+                          className="border-b border-zinc-200 last:border-b-0 hover:bg-zinc-50"
                         >
-                          {remainingDays <= 0
-                            ? "Berakhir"
-                            : `${remainingDays} hari`}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                          <td className="px-4 py-4 text-sm font-medium text-zinc-900">
+                            {index + 1}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm font-medium text-zinc-900">
+                            {membership.members?.name ?? "—"}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-zinc-700">
+                            {membership.membership_plans?.name ?? "—"}
+                          </td>
+
+                          <td className="px-4 py-4 text-sm text-zinc-700">
+                            {formatDate(membership.end_date)}
+                          </td>
+
+                          <td className="px-4 py-4">
+                            <span
+                              className={
+                                remainingDays <= 0
+                                  ? "rounded-full bg-red-100 px-2.5 py-1 text-xs font-semibold text-red-800"
+                                  : remainingDays <= 7
+                                    ? "rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800"
+                                    : "rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-800"
+                              }
+                            >
+                              {remainingDays <= 0
+                                ? "Berakhir"
+                                : `${remainingDays} hari`}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
         </div>
-      )
-      }
-    </div >
+      )}
+    </div>
   );
 }

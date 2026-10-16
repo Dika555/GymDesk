@@ -47,6 +47,16 @@ type Membership = {
   }[] | null;
 };
 
+type TransactionItem = {
+  id: string;
+  quantity: number;
+  unit_price: number;
+  subtotal: number;
+  products: {
+    name: string;
+  } | null;
+};
+
 export default function TransactionDetailPage({
   params,
 }: {
@@ -56,6 +66,8 @@ export default function TransactionDetailPage({
     useState<Transaction | null>(null);
   const [membership, setMembership] =
     useState<Membership | null>(null);
+  const [transactionItems, setTransactionItems] =
+    useState<TransactionItem[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -128,6 +140,38 @@ export default function TransactionDetailPage({
           if (membershipError) throw membershipError;
 
           setMembership(membershipData);
+        }
+
+        // Ambil rincian produk jika transaksi bertipe produk
+        if (data.transaction_type === "product") {
+          const { data: items, error: itemsError } = await supabase
+            .from("transaction_items")
+            .select(`
+              id,
+              quantity,
+              unit_price,
+              subtotal,
+              products (
+                name
+              )
+            `)
+            .eq("transaction_id", id);
+
+          if (itemsError) throw itemsError;
+
+          const formattedItems = (items ?? []).map((item) => {
+            const productData = item.products;
+            const product = Array.isArray(productData)
+              ? productData[0] ?? null
+              : productData ?? null;
+
+            return {
+              ...item,
+              products: product,
+            };
+          });
+
+          setTransactionItems(formattedItems);
         }
       } catch (error) {
         console.error("Gagal mengambil detail transaksi:", error);
@@ -392,6 +436,96 @@ export default function TransactionDetailPage({
           </div>
         )}
       </section>
+
+      {/* Detail Produk */}
+      {transaction.transaction_type === "product" && (
+        <section className="mt-5 rounded-xl border border-zinc-200 bg-white p-5 sm:p-6">
+          {/* Header */}
+          <div className="flex items-center gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
+              <Package size={22} />
+            </div>
+
+            <div>
+              <h2 className="text-lg font-bold text-zinc-900">
+                Detail Produk
+              </h2>
+              <p className="mt-0.5 text-sm text-zinc-500">
+                Rincian produk dalam transaksi ini
+              </p>
+            </div>
+          </div>
+
+          {/* Tabel Produk */}
+          <div className="mt-5 overflow-x-auto rounded-lg border border-zinc-200">
+            <table className="w-full min-w-[620px] text-left">
+              <thead className="bg-zinc-50">
+                <tr className="border-b border-zinc-200">
+                  <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Nama Produk
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Jumlah
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Harga Satuan
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                    Subtotal
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-zinc-100">
+                {transactionItems.length > 0 ? (
+                  transactionItems.map((item) => (
+                    <tr
+                      key={item.id}
+                      className="transition-colors hover:bg-zinc-50"
+                    >
+                      <td className="px-4 py-3.5 text-sm font-semibold text-zinc-900">
+                        {item.products?.name ?? "Produk tidak ditemukan"}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right text-sm text-zinc-600">
+                        {item.quantity}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right text-sm text-zinc-600">
+                        {formatRupiah(Number(item.unit_price))}
+                      </td>
+
+                      <td className="px-4 py-3.5 text-right text-sm font-semibold text-zinc-900">
+                        {formatRupiah(Number(item.subtotal))}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-4 py-8 text-center text-sm text-zinc-500"
+                    >
+                      Belum ada rincian produk untuk transaksi ini.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Total Pembayaran */}
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4">
+            <p className="text-sm font-medium text-zinc-500">
+              Total Pembayaran
+            </p>
+
+            <p className="text-xl font-bold tracking-tight text-zinc-900">
+              {formatRupiah(transaction.total_amount)}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* Detail Membership */}
       {transaction.transaction_type === "membership" && (

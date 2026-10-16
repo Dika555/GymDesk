@@ -280,7 +280,7 @@ export default function TrainersPage() {
 
             <div>
               <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-                Trainers
+                Personal Trainers
               </h1>
               <p className="mt-1 text-sm text-zinc-500 sm:text-base">
                 Kelola data trainer dan pantau member yang ditangani.
@@ -293,7 +293,7 @@ export default function TrainersPage() {
             onClick={() => setIsOpen(true)}
             className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
           >
-            <Dumbbell size={18} />
+            <Dumbbell size={18} />+
             Tambah Trainer
           </button>
         </div>

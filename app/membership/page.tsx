@@ -296,7 +296,7 @@ function MembershipContent() {
 
           <div>
             <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-              Membersip
+              Paket Membersip
             </h1>
 
             <p className="mt-1 text-sm text-zinc-500 sm:text-base">
@@ -311,8 +311,8 @@ function MembershipContent() {
           onClick={() => setIsFormOpen(true)}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-orange-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
         >
-          <IdCard size={18} />
-          Tambah Membership
+          <IdCard size={18} />+
+          Tambah Paket Membership
         </button>
       </div>
 
@@ -462,36 +462,9 @@ function MembershipContent() {
                           </ul>
 
                           {plan.benefits.length > 3 && (
-                            <span
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                e.stopPropagation();
-
-                                setExpandedBenefits((current) =>
-                                  current.includes(plan.id)
-                                    ? current.filter((id) => id !== plan.id)
-                                    : [...current, plan.id]
-                                );
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-
-                                  setExpandedBenefits((current) =>
-                                    current.includes(plan.id)
-                                      ? current.filter((id) => id !== plan.id)
-                                      : [...current, plan.id]
-                                  );
-                                }
-                              }}
-                              className="mt-3 inline-block cursor-pointer text-xs font-bold text-orange-700 hover:text-orange-900"
-                            >
-                              {expandedBenefits.includes(plan.id)
-                                ? "Tampilkan lebih sedikit"
-                                : `Lihat ${plan.benefits.length - 3} benefit lainnya`}
-                            </span>
+                            <p className="mt-3 text-xs font-bold text-orange-700">
+                              +{plan.benefits.length - 3} benefit lainnya
+                            </p>
                           )}
                         </>
                       ) : (

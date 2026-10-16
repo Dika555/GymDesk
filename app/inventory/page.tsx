@@ -205,8 +205,6 @@ export default function InventoryPage() {
   return (
     <main className="min-h-screen bg-white p-6 text-zinc-900">
       {/* Header Inventory */}
-      <div>
-        {/* Header Inventory */}
         <div>
           {/* Judul, deskripsi, dan tombol utama */}
           <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
@@ -322,9 +320,7 @@ export default function InventoryPage() {
               </p>
             </div>
           </div>
-
         </div>
-      </div>
 
       <div className="mt-6 flex items-center gap-3">
         <div className="flex-1">

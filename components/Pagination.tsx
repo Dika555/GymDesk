@@ -76,7 +76,7 @@ export default function Pagination({
             onClick={() => onPageChange(currentPage - 1)}
             disabled={currentPage === 1}
             aria-label="Halaman sebelumnya"
-            className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             ←
           </button>
@@ -95,7 +95,7 @@ export default function Pagination({
                 key={page}
                 onClick={() => onPageChange(page as number)}
                 aria-current={currentPage === page ? "page" : undefined}
-                className={`flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg text-sm transition sm:h-9 sm:w-9 ${currentPage === page
+                className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-sm transition sm:h-9 sm:w-9 ${currentPage === page
                     ? "bg-orange-500 text-white"
                     : "border border-gray-300 text-gray-600 hover:bg-gray-100"
                   }`}
@@ -110,7 +110,7 @@ export default function Pagination({
             onClick={() => onPageChange(currentPage + 1)}
             disabled={currentPage === totalPages}
             aria-label="Halaman berikutnya"
-            className="flex h-8.5 w-8.5 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-gray-300 text-gray-600 transition hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-40"
           >
             →
           </button>

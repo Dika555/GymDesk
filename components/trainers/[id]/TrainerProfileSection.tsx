@@ -68,17 +68,14 @@ export default function TrainerProfileSection({
                 </div>
 
                 <span
-                    className={`inline-flex w-fit items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold ${isActive
-                        ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
-                        : "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200"
+                    className={`inline-flex w-fit items-center rounded-full px-3 py-1.5 text-xs font-semibold ${isActive
+                            ? "bg-green-50 text-green-700 ring-1 ring-inset ring-green-200"
+                            : "bg-zinc-100 text-zinc-600 ring-1 ring-inset ring-zinc-200"
                         }`}
                 >
-                    <span
-                        className={`h-1.5 w-1.5 rounded-full ${isActive ? "bg-green-500" : "bg-zinc-400"
-                            }`}
-                    />
                     {isActive ? "Aktif" : "Tidak Aktif"}
                 </span>
+
             </div>
 
             {/* Informasi trainer */}

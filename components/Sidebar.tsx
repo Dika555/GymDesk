@@ -13,12 +13,12 @@ import {
 const menuItems = [
   { name: "Dashboard", href: "/" },
   { name: "Members", href: "/members" },
-  { name: "Membership", href: "/membership" },
-  { name: "Visits", href: "/visits" },
-  { name: "Trainers", href: "/trainers" },
-  { name: "Transactions", href: "/transactions" },
-  { name: "Inventory", href: "/inventory" },
-  { name: "Reports", href: "/reports" },
+  { name: "Paket Membership", href: "/membership" },
+  { name: "Kunjungan", href: "/visits" },
+  { name: "Personal Trainer", href: "/trainers" },
+  { name: "Transaksi", href: "/transactions" },
+  { name: "Stok Produk", href: "/inventory" },
+  { name: "Laporan", href: "/reports" },
 ];
 
 const superAdminMenuItems = [

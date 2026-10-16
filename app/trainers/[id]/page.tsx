@@ -2077,13 +2077,15 @@ export default function TrainerDetailPage({
     return (
         <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
 
-            <button
-                onClick={() => window.history.back()}
-                className="mb-6 inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 hover:text-zinc-900"
-            >
-                <span aria-hidden="true">←</span>
-                Kembali
-            </button>
+            <div className="mb-6 flex justify-end">
+                <button
+                    onClick={() => window.history.back()}
+                    className="inline-flex items-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:bg-zinc-100 hover:text-zinc-900"
+                >
+                    <span aria-hidden="true">←</span>
+                    Kembali
+                </button>
+            </div>
 
 
             {/* =========================

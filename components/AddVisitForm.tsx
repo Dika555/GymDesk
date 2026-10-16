@@ -29,6 +29,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
   const [visitorName, setVisitorName] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
   type FeedbackType = "success" | "error" | "warning" | "info";
@@ -188,6 +189,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
         p_visit_date: visitDate,
         p_payment_method:
           visitType === "member" ? null : paymentMethod,
+        p_notes: notes.trim() || null,
       });
 
       if (error) {
@@ -205,6 +207,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
       setVisitorName("");
       setVisitDate("");
       setPaymentMethod("");
+      setNotes("");
       setMemberHasActiveMembership(false);
 
       onSuccess();
@@ -397,6 +400,24 @@ export default function AddVisitForm({ onSuccess }: Props) {
             }}
             className="w-full rounded-lg border px-3 py-2"
           />
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-medium">
+            Catatan Kunjungan
+          </label>
+
+          <textarea
+            value={notes}
+            onChange={(e) => setNotes(e.target.value)}
+            placeholder="Contoh: Kunjungan tanggal..."
+            rows={3}
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
+          />
+
+          <p className="mt-1 text-xs text-gray-500">
+            Opsional. Catatan ini akan disimpan pada transaksi kunjungan non-member.
+          </p>
         </div>
       </form>
 

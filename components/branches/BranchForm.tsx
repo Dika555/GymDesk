@@ -40,6 +40,7 @@ export default function BranchForm({
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="Nama cabang"
           className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
+          required
         />
       </div>
 
@@ -54,6 +55,7 @@ export default function BranchForm({
           placeholder="Alamat cabang"
           rows={3}
           className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
+          required
         />
       </div>
 
@@ -68,6 +70,7 @@ export default function BranchForm({
           onChange={(e) => onPhoneChange(e.target.value)}
           placeholder="Nomor telepon"
           className="w-full rounded-lg border border-zinc-300 px-4 py-3 text-sm outline-none focus:border-orange-500"
+          required
         />
       </div>
     </form>

@@ -236,6 +236,8 @@ export default function AddProductForm({ onSuccess }: Props) {
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">
               Stok Awal
+              <br />
+              (Jumlah stok tersedia di awal)
             </label>
 
             <input
@@ -253,6 +255,8 @@ export default function AddProductForm({ onSuccess }: Props) {
           <div>
             <label className="mb-1 block text-sm font-medium text-zinc-700">
               Minimal Stok
+              <br />
+              (Pengingat stok menipis)
             </label>
 
             <input
