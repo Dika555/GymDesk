@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import LoadingScreen from "@/components/LoadingScreen";
+import LoadingScreen from "@/components/ui/LoadingScreen";
 
 export default function LoginPage() {
   const router = useRouter();

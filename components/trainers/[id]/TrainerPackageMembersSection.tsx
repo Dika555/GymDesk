@@ -10,8 +10,8 @@ import {
     XCircle,
 } from "lucide-react";
 
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 import TrainerPurchaseModal from "@/components/trainers/[id]/TrainerPurchaseModal";
 import type {
     Trainer,

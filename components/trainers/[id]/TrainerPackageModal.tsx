@@ -1,5 +1,5 @@
 import TrainerPackageForm from "@/components/trainers/[id]/TrainerPackageForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type Props = {
     editingPackageId: string | null;

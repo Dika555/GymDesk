@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import EditMembershipModal from "@/components/EditMembershipModal";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
+import EditMembershipModal from "@/components/memberships/[id]/EditMembershipModal";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 import {
     ArrowLeft,

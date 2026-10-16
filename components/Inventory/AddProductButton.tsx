@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { PackagePlus } from "lucide-react";
-import AddProductModal from "@/components/AddProductModal";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddProductModal from "@/components/inventory/AddProductModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type Props = {
   onSuccess: () => void;

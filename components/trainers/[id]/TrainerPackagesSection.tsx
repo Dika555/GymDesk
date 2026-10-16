@@ -10,8 +10,8 @@ import {
     Trash2,
 } from "lucide-react";
 
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 import TrainerPackageModal from "@/components/trainers/[id]/TrainerPackageModal";
 import type { TrainerPackage } from "@/components/trainers/[id]/types";
 

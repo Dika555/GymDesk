@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import AddMemberForm from "@/components/AddMemberForm";
-import Modal from "@/components/Modal";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddMemberForm from "@/components/members/AddMemberForm";
+import Modal from "@/components/ui/Modal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type Member = {
   id: string;

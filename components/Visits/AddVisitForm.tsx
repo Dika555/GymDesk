@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import Select from "react-select";
-import FeedbackModal from "@/components/FeedbackModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type Member = {
   id: string;
@@ -29,6 +29,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
   const [visitorName, setVisitorName] = useState("");
   const [visitDate, setVisitDate] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("");
+  const [visitFee, setVisitFee] = useState("35000");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -116,6 +117,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
     setMemberId("");
     setVisitorName("");
     setPaymentMethod("");
+    setVisitFee("35000");
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -181,6 +183,7 @@ export default function AddVisitForm({ onSuccess }: Props) {
         return;
       }
 
+
       const { error } = await supabase.rpc("create_visit", {
         p_branch_id: branchId,
         p_member_id: visitType === "member" ? memberId : null,
@@ -189,8 +192,11 @@ export default function AddVisitForm({ onSuccess }: Props) {
         p_visit_date: visitDate,
         p_payment_method:
           visitType === "member" ? null : paymentMethod,
+        p_visit_fee:
+          visitType === "member" ? 0 : Number(visitFee),
         p_notes: notes.trim() || null,
       });
+
 
       if (error) {
         console.error("Gagal mencatat kunjungan:", error);
@@ -314,25 +320,23 @@ export default function AddVisitForm({ onSuccess }: Props) {
                 onChange={(e) => setVisitorName(e.target.value)}
                 placeholder="Masukkan nama pengunjung"
                 className="w-full rounded-lg border px-3 py-2"
+                required
               />
             </div>
 
             <div>
               <label className="mb-2 block text-sm font-medium">
-                Biaya Kunjungan
+                Biaya Kunjungan (Rp)
               </label>
 
               <input
-                type="text"
-                value={
-                  checkingMembership
-                    ? "Memeriksa..."
-                    : memberHasActiveMembership
-                      ? "Rp 0"
-                      : "Tidak memiliki membership aktif"
-                }
-                readOnly
-                className="w-full rounded-lg border bg-gray-100 px-3 py-2"
+                type="number"
+                min="0"
+                step="1000"
+                value={visitFee}
+                onChange={(e) => setVisitFee(e.target.value)}
+                className="w-full rounded-lg border px-3 py-2"
+                required
               />
             </div>
 

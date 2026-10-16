@@ -1,5 +1,5 @@
 import TrainerForm from "@/components/trainers/TrainerForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type Props = {
     name: string;

@@ -1,7 +1,7 @@
 "use client";
 
-import AddProductForm from "@/components/AddProductForm";
-import Modal from "@/components/Modal";
+import AddProductForm from "@/components/inventory/AddProductForm";
+import Modal from "@/components/ui/Modal";
 
 type Props = {
   onClose: () => void;

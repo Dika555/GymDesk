@@ -12,9 +12,9 @@ import TrainerPackageModal from "@/components/trainers/[id]/TrainerPackageModal"
 import TrainerSessionModal from "@/components/trainers/[id]/TrainerSessionModal";
 import TrainerPurchaseModal from "@/components/trainers/[id]/TrainerPurchaseModal";
 import TrainerEditModal from "@/components/trainers/[id]/TrainerEditModal";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import type {
     Trainer,
     TrainerPackage,

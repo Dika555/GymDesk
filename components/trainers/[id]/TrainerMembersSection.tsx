@@ -14,8 +14,8 @@ import type {
     AvailableMember,
 } from "@/components/trainers/[id]/types";
 
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 import TrainerMemberModal from "@/components/trainers/[id]/TrainerMemberModal";
 
 type TrainerMembersSectionProps = {

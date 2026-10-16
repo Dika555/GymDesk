@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Pagination from "@/components/Pagination";
+import Pagination from "@/components/ui/Pagination";
 import {
   Package
 } from "lucide-react";

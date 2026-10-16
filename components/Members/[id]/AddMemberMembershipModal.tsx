@@ -1,9 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import AddMemberMembershipForm from "@/components/AddMemberMembershipForm";
-import Modal from "@/components/Modal";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddMemberMembershipForm from "@/components/members/[id]/AddMemberMembershipForm";
+import Modal from "@/components/ui/Modal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type FeedbackType = "success" | "error" | "warning" | "info";
 

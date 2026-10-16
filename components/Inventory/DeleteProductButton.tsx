@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type DeleteProductButtonProps = {
   productId: string;

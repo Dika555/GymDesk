@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
-import AddMemberMembershipButton from "@/components/AddMemberMembershipButton";
+import AddMemberMembershipButton from "@/components/members/[id]/AddMemberMembershipButton";
 import {
   User,
   ArrowLeft,

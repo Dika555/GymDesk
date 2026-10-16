@@ -319,8 +319,7 @@ export default function TransactionDetailPage({
             </p>
           </div>
         </div>
-
-        {/* Tombol Kembali di Sebelah Kanan */}
+        
         <Link
           href="/transactions"
           className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 shadow-sm transition-colors hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"

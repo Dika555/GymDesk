@@ -8,8 +8,8 @@ import {
     RotateCcw,
 } from "lucide-react";
 
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 import type { TrainerSession } from "@/components/trainers/[id]/types";
 
 type TrainerSessionsSectionProps = {

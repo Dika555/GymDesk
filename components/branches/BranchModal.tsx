@@ -1,7 +1,7 @@
 "use client";
 
 import BranchForm from "@/components/branches/BranchForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type Props = {
   editingId: string | null;

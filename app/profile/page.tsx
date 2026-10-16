@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import ProfileEditModal from "@/components/profile/ProfileEditModal";
 import BranchEditModal from "@/components/profile/BranchEditModal";
-import FeedbackModal from "@/components/FeedbackModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import {
   UserRound,
   Building2,

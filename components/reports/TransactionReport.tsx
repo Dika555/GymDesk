@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { ReceiptText } from "lucide-react";
-import Pagination from "@/components/Pagination";
+import Pagination from "@/components/ui/Pagination";
 
 type TransactionReportItem = {
   id: string;

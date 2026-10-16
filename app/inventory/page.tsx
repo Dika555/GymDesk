@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import AddProductButton from "@/components/AddProductButton";
-import AddStockButton from "@/components/AddStockButton";
-import StockHistory from "@/components/StockHistory";
-import EditProductButton from "@/components/EditProductButton";
-import DeleteProductButton from "@/components/DeleteProductButton";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddProductButton from "@/components/inventory/AddProductButton";
+import AddStockButton from "@/components/inventory/AddStockButton";
+import StockHistory from "@/components/inventory/StockHistory";
+import EditProductButton from "@/components/inventory/EditProductButton";
+import DeleteProductButton from "@/components/inventory/DeleteProductButton";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import {
   Package,
   Boxes,

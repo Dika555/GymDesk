@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import AddProductTransactionModal from "@/components/AddTransactionModal";
+import AddProductTransactionModal from "@/components/transactions/AddTransactionModal";
 
 type Props = {
   onSuccess: () => void;

@@ -4,10 +4,10 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import AddTransactionButton from "@/components/AddTransactionButton";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddTransactionButton from "@/components/transactions/AddTransactionButton";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import {
   ReceiptText,
   ArrowUpRight,

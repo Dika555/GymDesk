@@ -3,10 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import BranchModal from "@/components/branches/BranchModal";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
-import Modal from "@/components/Modal";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
+import Modal from "@/components/ui/Modal";
 import {
   Building2,
   Pencil,

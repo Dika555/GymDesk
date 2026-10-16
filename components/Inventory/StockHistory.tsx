@@ -10,8 +10,8 @@ import {
 
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 
 type StockMovement = {
   id: string;

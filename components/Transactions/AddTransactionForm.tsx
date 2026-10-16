@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import AddProductTransactionForm from "@/components/AddProductTransactionForm";
+import AddProductTransactionForm from "@/components/transactions/AddProductTransactionForm";
 import Select from "react-select";
-import FeedbackModal from "@/components/FeedbackModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type Member = {
   id: string;

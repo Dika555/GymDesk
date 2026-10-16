@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
-import BranchSwitcher from "@/components/BranchSwitcher";
+import BranchSwitcher from "@/components/layout/BranchSwitcher";
 import {
   Menu,
   UserRound

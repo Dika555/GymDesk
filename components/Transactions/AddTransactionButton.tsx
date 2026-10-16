@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import AddTransactionModal from "@/components/AddTransactionModal";
+import AddTransactionModal from "@/components/transactions/AddTransactionModal";
 import {
   ReceiptText
 } from "lucide-react";

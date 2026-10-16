@@ -3,9 +3,9 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import MemberModal from "@/components/MemberModal";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
+import MemberModal from "@/components/members/MemberModal";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
 import {
   CreditCard,
   User,

@@ -1,7 +1,7 @@
 "use client";
 
 import AddStockForm from "./AddStockForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type AddStockModalProps = {
   open: boolean;

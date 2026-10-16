@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type FeedbackType = "success" | "error" | "warning" | "info";
 

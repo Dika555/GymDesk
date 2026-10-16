@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import AddVisitModal from "@/components/AddVisitModal";
+import AddVisitModal from "@/components/visits/AddVisitModal";
 import {
   CalendarCheck
 } from "lucide-react";

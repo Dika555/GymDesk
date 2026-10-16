@@ -1,22 +1,21 @@
 "use client";
 
-import AddTransactionForm from "@/components/AddTransactionForm";
-import Modal from "@/components/Modal";
+import AddVisitForm from "@/components/visits/AddVisitForm";
+import Modal from "@/components/ui/Modal";
 
 type Props = {
   onClose: () => void;
   onSuccess: () => void;
 };
 
-export default function AddTransactionModal({
+export default function AddVisitModal({
   onClose,
   onSuccess,
 }: Props) {
   return (
     <Modal
-      title="Tambah Transaksi"
+      title="Catat Kunjungan"
       onClose={onClose}
-      maxWidth="max-w-2xl"
       footer={
         <div className="flex gap-3">
           <button
@@ -29,19 +28,16 @@ export default function AddTransactionModal({
 
           <button
             type="submit"
-            form="add-transaction-form"
+            form="add-visit-form"
             className="flex-1 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600"
           >
-            Simpan Transaksi
+            Simpan Kunjungan
           </button>
         </div>
       }
-
+      
     >
-      <AddTransactionForm
-        onSuccess={onSuccess}
-        showBodySubmit={false}
-      />
+      <AddVisitForm onSuccess={onSuccess} />
     </Modal>
   );
 }

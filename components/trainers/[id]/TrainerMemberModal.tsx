@@ -1,5 +1,5 @@
 import TrainerMemberForm from "@/components/trainers/[id]/TrainerMemberForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type AvailableMember = {
     id: string;

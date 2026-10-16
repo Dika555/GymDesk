@@ -1,7 +1,7 @@
 "use client";
 
 import AdminForm from "@/components/admins/AdminForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type Branch = {
   id: string;

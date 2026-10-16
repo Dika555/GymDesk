@@ -1,10 +1,12 @@
 "use client";
 
 import { useState } from "react";
-import AddMemberMembershipModal from "@/components/AddMemberMembershipModal";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddMemberMembershipModal from "@/components/members/[id]/AddMemberMembershipModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import { useRouter } from "next/navigation";
-
+import {
+  IdCard
+} from "lucide-react";
 type FeedbackType = "success" | "error" | "warning" | "info";
 
 type Props = {
@@ -58,9 +60,10 @@ export default function AddMemberMembershipButton({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+        className="inline-flex shrink-0 items-center justify-center rounded-xl bg-orange-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-orange-600 gap-2"
       >
-        + Tambah Membership
+        <IdCard size={18} />+
+        Tambah Paket Membership
       </button>
 
       {isOpen && (

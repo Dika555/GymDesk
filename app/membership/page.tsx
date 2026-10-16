@@ -4,10 +4,10 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
-import AddMembershipModal from "@/components/AddMembershipModal";
-import Search from "@/components/Search";
-import Pagination from "@/components/Pagination";
-import FeedbackModal from "@/components/FeedbackModal";
+import AddMembershipModal from "@/components/memberships/AddMembershipModal";
+import Search from "@/components/ui/Search";
+import Pagination from "@/components/ui/Pagination";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 import { useSearchParams } from "next/navigation";
 
 import {

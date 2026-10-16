@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { PackagePlus } from "lucide-react";
 import AddStockModal from "./AddStockModal";
-import FeedbackModal from "@/components/FeedbackModal";
+import FeedbackModal from "@/components/ui/FeedbackModal";
 
 type FeedbackType = "success" | "error" | "warning" | "info";
 

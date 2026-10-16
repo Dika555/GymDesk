@@ -1,7 +1,7 @@
 "use client";
 
 import EditProductForm from "./EditProductForm";
-import Modal from "@/components/Modal";
+import Modal from "@/components/ui/Modal";
 
 type EditProductModalProps = {
   open: boolean;
