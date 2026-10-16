@@ -54,8 +54,8 @@ export default function ExpiringMemberships({
           Tidak ada membership yang akan berakhir dalam waktu dekat.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-200">
-          <div className="overflow-x-auto">
+        <div className="w-full min-w-0 rounded-xl border border-zinc-200">
+          <div className="w-full min-w-0 overflow-x-auto">
             <div className="min-w-[650px]">
               <table className="w-full table-fixed">
                 <colgroup>
@@ -92,7 +92,7 @@ export default function ExpiringMemberships({
               </table>
 
               {/* Body tabel: scroll vertikal hanya di bagian ini */}
-              <div className="max-h-56 overflow-y-auto">
+              <div className="max-h-56 overflow-y-auto overflow-x-hidden">
                 <table className="w-full table-fixed">
                   <colgroup>
                     <col className="w-[8%]" />

@@ -75,11 +75,9 @@ export default function RecentActivity({ activities }: Props) {
           Belum ada aktivitas.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-zinc-200">
-          {/* Scroll horizontal untuk header dan body */}
-          <div className="overflow-x-auto">
+        <div className="w-full min-w-0 rounded-xl border border-zinc-200">
+          <div className="w-full min-w-0 overflow-x-auto">
             <div className="min-w-[650px]">
-              {/* Header tabel: tidak ikut scroll vertikal */}
               <table className="w-full table-fixed">
                 <colgroup>
                   <col className="w-[8%]" />
@@ -115,7 +113,7 @@ export default function RecentActivity({ activities }: Props) {
               </table>
 
               {/* Body tabel: scroll vertikal hanya di bagian ini */}
-              <div className="max-h-60 overflow-y-auto">
+              <div className="max-h-60 overflow-y-auto overflow-x-hidden">
                 <table className="w-full table-fixed">
                   <colgroup>
                     <col className="w-[8%]" />
