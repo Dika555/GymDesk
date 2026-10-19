@@ -1,21 +1,18 @@
+
 "use client";
 
 import { useEffect, useState } from "react";
 import Pagination from "@/components/ui/Pagination";
-import {
-  Package
-} from "lucide-react";
+import { Package } from "lucide-react";
 
 type ProductReportItem = {
   id: string;
   name: string;
   category: string;
   price: number;
-  openingStock: number | null;
+  currentStock: number;
   stockIn: number;
   stockOut: number;
-  endingStock: number | null;
-  historyComplete: boolean;
 };
 
 type ProductReportProps = {
@@ -45,10 +42,12 @@ export default function ProductReport({
     startIndex + ITEMS_PER_PAGE
   );
 
-  function formatStock(value: number | null) {
-    return value === null
-      ? "Riwayat belum lengkap"
-      : value.toLocaleString("id-ID");
+  function formatCurrency(value: number) {
+    return value.toLocaleString("id-ID", {
+      style: "currency",
+      currency: "IDR",
+      maximumFractionDigits: 0,
+    });
   }
 
   return (
@@ -64,14 +63,14 @@ export default function ProductReport({
           </h2>
 
           <p className="mt-1 text-sm text-zinc-500">
-            Pergerakan stok berdasarkan periode laporan.
+            Stok saat ini dan pergerakan stok berdasarkan periode laporan.
           </p>
         </div>
       </div>
 
       <div className="mt-5 overflow-hidden rounded-xl border border-zinc-200">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1000px]">
+          <table className="w-full min-w-[850px]">
             <thead className="bg-zinc-50">
               <tr className="border-b border-zinc-200 text-left">
                 {[
@@ -79,10 +78,9 @@ export default function ProductReport({
                   "Produk",
                   "Kategori",
                   "Harga",
-                  "Stok Awal",
+                  "Stok Saat Ini",
                   "Stok Masuk",
                   "Stok Keluar",
-                  "Stok Akhir",
                 ].map((heading) => (
                   <th
                     key={heading}
@@ -114,15 +112,11 @@ export default function ProductReport({
                     </td>
 
                     <td className="px-4 py-3.5 text-sm text-zinc-600">
-                      {product.price.toLocaleString("id-ID", {
-                        style: "currency",
-                        currency: "IDR",
-                        maximumFractionDigits: 0,
-                      })}
+                      {formatCurrency(product.price)}
                     </td>
 
-                    <td className="px-4 py-3.5 text-sm text-zinc-600">
-                      {formatStock(product.openingStock)}
+                    <td className="px-4 py-3.5 text-sm font-semibold text-zinc-900">
+                      {product.currentStock.toLocaleString("id-ID")}
                     </td>
 
                     <td className="px-4 py-3.5 text-sm text-green-700">
@@ -132,16 +126,12 @@ export default function ProductReport({
                     <td className="px-4 py-3.5 text-sm text-red-600">
                       {product.stockOut.toLocaleString("id-ID")}
                     </td>
-
-                    <td className="px-4 py-3.5 text-sm font-semibold text-zinc-900">
-                      {formatStock(product.endingStock)}
-                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan={8}
+                    colSpan={7}
                     className="px-4 py-10 text-center text-sm text-zinc-500"
                   >
                     Tidak ada data produk pada periode ini.
@@ -163,13 +153,6 @@ export default function ProductReport({
             onPageChange={setCurrentPage}
           />
         </div>
-      )}
-
-      {products.some((product) => !product.historyComplete) && (
-        <p className="mt-4 text-sm text-amber-700">
-          Sebagian produk belum memiliki riwayat stok yang cukup untuk
-          menghitung stok awal dan akhir secara akurat.
-        </p>
       )}
     </div>
   );

@@ -125,11 +125,9 @@ export default function ReportsPage() {
       name: string;
       category: string;
       price: number;
-      openingStock: number | null;
+      currentStock: number;
       stockIn: number;
       stockOut: number;
-      endingStock: number | null;
-      historyComplete: boolean;
     }[]
   >([]);
 
@@ -459,10 +457,9 @@ export default function ReportsPage() {
         Produk: product.name,
         Kategori: product.category || "-",
         Harga: product.price,
-        "Stok Awal": product.openingStock ?? "Riwayat belum lengkap",
+        "Stok Saat Ini": product.currentStock,
         "Stok Masuk": product.stockIn,
         "Stok Keluar": product.stockOut,
-        "Stok Akhir": product.endingStock ?? "Riwayat belum lengkap",
       }));
 
       const worksheet = XLSX.utils.json_to_sheet(productData);
@@ -970,6 +967,7 @@ export default function ReportsPage() {
   }
 
 
+
   async function loadProductReport() {
     const supabase = createClient();
     const branchId = getActiveBranchId();
@@ -979,13 +977,17 @@ export default function ReportsPage() {
       return;
     }
 
-    // Pastikan tanggal laporan sudah dipilih.
     if (!startDate || !endDate) {
       setMessage("Silakan pilih tanggal mulai dan tanggal akhir.");
       return;
     }
 
-    // 1. Ambil semua produk dari cabang aktif.
+    if (startDate > endDate) {
+      setMessage("Tanggal mulai tidak boleh melebihi tanggal akhir.");
+      return;
+    }
+
+    // 1. Ambil produk dari cabang aktif.
     const { data: products, error: productError } = await supabase
       .from("products")
       .select("id, name, category, price, stock")
@@ -993,35 +995,37 @@ export default function ReportsPage() {
       .order("name", { ascending: true });
 
     if (productError) {
-      console.error("Gagal mengambil data produk.");
+      console.error("Gagal mengambil data produk:", productError);
       setMessage("Gagal mengambil data produk.");
       return;
     }
 
-    const productIds = (products ?? []).map((product) => product.id);
-
-    if (productIds.length === 0) {
+    if (!products || products.length === 0) {
       setProductReport([]);
       setMessage("Tidak ada produk pada cabang ini.");
       return;
     }
 
-    // 2. Ambil riwayat pergerakan stok, termasuk sebelum periode.
+    const productIds = products.map((product) => product.id);
+
+    // 2. Ambil riwayat pergerakan stok produk.
     const { data: movements, error: movementError } = await supabase
       .from("stock_movements")
-      .select("product_id, type, quantity, description, created_at")
+      .select("product_id, type, quantity, created_at")
       .eq("branch_id", branchId)
       .in("product_id", productIds)
       .order("created_at", { ascending: true });
 
     if (movementError) {
-      console.error("Gagal mengambil data pergerakan stok.");
+      console.error(
+        "Gagal mengambil data pergerakan stok:",
+        movementError
+      );
       setMessage("Gagal mengambil data pergerakan stok.");
       return;
     }
 
-    // Gunakan batas waktu WIB (UTC+7).
-    // Tanggal akhir menggunakan batas eksklusif hari berikutnya.
+    // 3. Tentukan periode laporan dalam waktu WIB.
     const startTime = new Date(
       `${startDate}T00:00:00+07:00`
     ).getTime();
@@ -1030,25 +1034,19 @@ export default function ReportsPage() {
       new Date(`${endDate}T00:00:00+07:00`).getTime() +
       24 * 60 * 60 * 1000;
 
-    // 3. Hitung laporan masing-masing produk.
-    const report = (products ?? []).map((product) => {
+    // 4. Hitung stok masuk dan keluar per produk.
+    const report = products.map((product) => {
+      let stockIn = 0;
+      let stockOut = 0;
+
       const productMovements = (movements ?? []).filter(
         (movement) => movement.product_id === product.id
       );
 
-      // Catatan stok awal yang dibuat oleh form tambah produk.
-      const initialMovement = productMovements.find(
-        (movement) =>
-          movement.type === "in" &&
-          movement.description === "Stok awal produk"
-      );
-
-      let stockIn = 0;
-      let stockOut = 0;
-
-      // Hitung pergerakan stok yang terjadi di dalam periode.
       for (const movement of productMovements) {
-        const movementTime = new Date(movement.created_at).getTime();
+        const movementTime = new Date(
+          movement.created_at
+        ).getTime();
 
         if (
           movementTime < startTime ||
@@ -1066,90 +1064,21 @@ export default function ReportsPage() {
         }
       }
 
-      // Produk lama tanpa catatan stok awal tidak dapat
-      // dipastikan stok historisnya hanya dari riwayat yang tersedia.
-      if (!initialMovement) {
-        return {
-          id: product.id,
-          name: product.name,
-          category: product.category ?? "",
-          price: Number(product.price ?? 0),
-          openingStock: null,
-          stockIn,
-          stockOut,
-          endingStock: null,
-          historyComplete: false,
-        };
-      }
-
-      const initialTime = new Date(
-        initialMovement.created_at
-      ).getTime();
-
-      let openingStock = Number(initialMovement.quantity ?? 0);
-      let hasEarlierAdjustment = false;
-      let hasPeriodAdjustment = false;
-
-      // Hitung stok sebelum tanggal mulai.
-      for (const movement of productMovements) {
-        const movementTime = new Date(movement.created_at).getTime();
-
-        // Jangan hitung catatan yang mendahului catatan stok awal.
-        if (movementTime <= initialTime || movementTime >= startTime) {
-          continue;
-        }
-
-        const quantity = Number(movement.quantity ?? 0);
-
-        if (movement.type === "in") {
-          openingStock += quantity;
-        } else if (movement.type === "out") {
-          openingStock -= quantity;
-        } else if (movement.type === "adjustment") {
-          hasEarlierAdjustment = true;
-        }
-      }
-
-      // Periksa apakah ada adjustment di periode laporan.
-      for (const movement of productMovements) {
-        const movementTime = new Date(movement.created_at).getTime();
-
-        if (
-          movementTime >= startTime &&
-          movementTime < endExclusiveTime &&
-          movement.type === "adjustment"
-        ) {
-          hasPeriodAdjustment = true;
-        }
-      }
-
-      // Adjustment belum dihitung karena perlu memastikan
-      // apakah quantity merupakan nilai perubahan atau stok hasil penyesuaian.
-      const validOpeningStock =
-        !hasEarlierAdjustment &&
-        Number.isFinite(openingStock);
-
-      const endingStock =
-        validOpeningStock && !hasPeriodAdjustment
-          ? openingStock + stockIn - stockOut
-          : null;
-
       return {
         id: product.id,
         name: product.name,
         category: product.category ?? "",
         price: Number(product.price ?? 0),
-        openingStock: validOpeningStock ? openingStock : null,
+
+        // Stok saat ini berasal langsung dari tabel products.
+        currentStock: Number(product.stock ?? 0),
+
+        // Pergerakan stok hanya untuk periode laporan.
         stockIn,
         stockOut,
-        endingStock,
-        historyComplete:
-          validOpeningStock &&
-          !hasPeriodAdjustment,
       };
     });
 
-    // 4. Kirim hasil ke komponen laporan.
     setProductReport(report);
     setMessage("Laporan berhasil diperbarui.");
   }
