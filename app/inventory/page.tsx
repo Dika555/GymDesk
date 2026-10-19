@@ -139,6 +139,9 @@ export default function InventoryPage() {
       (stockFilter === "out" &&
         stockStatus.label === "Stok Habis");
 
+    function refreshStockHistory() {
+      window.dispatchEvent(new Event("stock-history-updated"));
+    }
 
     return (
       matchesSearch &&
@@ -146,6 +149,12 @@ export default function InventoryPage() {
       matchesStock
     );
   });
+
+
+  function refreshStockHistory() {
+    window.dispatchEvent(new Event("stock-history-updated"));
+  }
+
 
   const totalPages = Math.ceil(
     filteredProducts.length / ITEMS_PER_PAGE
@@ -201,126 +210,127 @@ export default function InventoryPage() {
     };
   }
 
-
   return (
     <main className="min-h-screen bg-white p-6 text-zinc-900">
       {/* Header Inventory */}
-        <div>
-          {/* Judul, deskripsi, dan tombol utama */}
-          <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
-            <div className="flex items-center gap-4">
-              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
-                <Package size={28} />
-              </div>
-
-              <div>
-                <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
-                  Inventory
-                </h1>
-
-                <p className="mt-1 text-sm text-zinc-500 sm:text-base">
-                  Kelola produk, pantau ketersediaan stok, dan catat
-                  perubahan persediaan produk di cabang gym.
-                </p>
-              </div>
+      <div>
+        {/* Judul, deskripsi, dan tombol utama */}
+        <div className="flex flex-col justify-between gap-5 sm:flex-row sm:items-start">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
+              <Package size={28} />
             </div>
 
-            <div className="flex flex-wrap gap-3">
-              <AddStockButton
-                onSuccess={() => {
-                  void getProducts();
-                }}
-              />
-              <AddProductButton
-                onSuccess={() => {
-                  void getProducts();
-                }}
-              />
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-zinc-900 sm:text-3xl">
+                Inventory
+              </h1>
+
+              <p className="mt-1 text-sm text-zinc-500 sm:text-base">
+                Kelola produk, pantau ketersediaan stok, dan catat
+                perubahan persediaan produk di cabang gym.
+              </p>
             </div>
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <AddStockButton
+              onSuccess={() => {
+                void getProducts();
+                refreshStockHistory();
+              }}
+            />
+            <AddProductButton
+              onSuccess={() => {
+                void getProducts();
+                refreshStockHistory();
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Statistik Inventory */}
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
+        {/* Total Produk */}
+        <div className="flex items-center gap-4 rounded-xl border border-orange-200 bg-orange-50 p-4">
+          <div className="shrink-0 rounded-lg bg-orange-500 p-3 text-white">
+            <Package size={24} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-orange-800">
+              Total Produk
+            </p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900">
+              {products.length}
+            </p>
+            <p className="text-sm text-zinc-600">
+              Jenis produk terdaftar
+            </p>
           </div>
         </div>
 
-        {/* Statistik Inventory */}
-        <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2 2xl:grid-cols-4">
-          {/* Total Produk */}
-          <div className="flex items-center gap-4 rounded-xl border border-orange-200 bg-orange-50 p-4">
-            <div className="shrink-0 rounded-lg bg-orange-500 p-3 text-white">
-              <Package size={24} />
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-orange-800">
-                Total Produk
-              </p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {products.length}
-              </p>
-              <p className="text-sm text-zinc-600">
-                Jenis produk terdaftar
-              </p>
-            </div>
+        {/* Total Unit Stok */}
+        <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
+          <div className="shrink-0 rounded-lg bg-blue-600 p-3 text-white">
+            <Boxes size={24} />
           </div>
 
-          {/* Total Unit Stok */}
-          <div className="flex items-center gap-4 rounded-xl border border-blue-200 bg-blue-50 p-4">
-            <div className="shrink-0 rounded-lg bg-blue-600 p-3 text-white">
-              <Boxes size={24} />
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-blue-800">
-                Total Unit Stok
-              </p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {products.reduce((total, product) => total + product.stock, 0)}
-              </p>
-              <p className="text-sm text-zinc-600">
-                Seluruh unit produk
-              </p>
-            </div>
-          </div>
-
-          {/* Stok Menipis */}
-          <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
-            <div className="shrink-0 rounded-lg bg-yellow-500 p-3 text-white">
-              <TriangleAlert size={24} />
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-yellow-600">
-                Stok Menipis
-              </p>
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {products.filter((product) => product.stock <= product.min_stock).length}
-              </p>
-              <p className="text-sm text-zinc-600">
-                Produk perlu diperiksa
-              </p>
-            </div>
-          </div>
-
-
-          {/* Stok Habis */}
-          <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
-            <div className="shrink-0 rounded-lg bg-red-600 p-3 text-white">
-              <Package size={24} />
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-sm font-semibold text-red-800">
-                Stok Habis
-              </p>
-
-              <p className="mt-1 text-2xl font-bold text-zinc-900">
-                {outOfStockProducts}
-              </p>
-
-              <p className="text-sm text-zinc-600">
-                Produk perlu diisi ulang
-              </p>
-            </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-blue-800">
+              Total Unit Stok
+            </p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900">
+              {products.reduce((total, product) => total + product.stock, 0)}
+            </p>
+            <p className="text-sm text-zinc-600">
+              Seluruh unit produk
+            </p>
           </div>
         </div>
+
+        {/* Stok Menipis */}
+        <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="shrink-0 rounded-lg bg-yellow-500 p-3 text-white">
+            <TriangleAlert size={24} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-yellow-600">
+              Stok Menipis
+            </p>
+            <p className="mt-1 text-2xl font-bold text-zinc-900">
+              {products.filter((product) => product.stock <= product.min_stock).length}
+            </p>
+            <p className="text-sm text-zinc-600">
+              Produk perlu diperiksa
+            </p>
+          </div>
+        </div>
+
+
+        {/* Stok Habis */}
+        <div className="flex items-center gap-4 rounded-xl border border-red-200 bg-red-50 p-4">
+          <div className="shrink-0 rounded-lg bg-red-600 p-3 text-white">
+            <Package size={24} />
+          </div>
+
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-red-800">
+              Stok Habis
+            </p>
+
+            <p className="mt-1 text-2xl font-bold text-zinc-900">
+              {outOfStockProducts}
+            </p>
+
+            <p className="text-sm text-zinc-600">
+              Produk perlu diisi ulang
+            </p>
+          </div>
+        </div>
+      </div>
 
       <div className="mt-6 flex items-center gap-3">
         <div className="flex-1">
@@ -472,6 +482,7 @@ export default function InventoryPage() {
                               );
 
                               void getProducts();
+                              refreshStockHistory();
                             }}
                             onError={(message) => {
                               showFeedback("Gagal Mengubah Produk", message, "error");
@@ -489,6 +500,7 @@ export default function InventoryPage() {
                               );
 
                               void getProducts();
+                              refreshStockHistory();
                             }}
                             onError={(message) => {
                               showFeedback("Gagal Menghapus Produk", message, "error");

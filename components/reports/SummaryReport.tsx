@@ -1,6 +1,5 @@
 import {
   Users,
-  CreditCard,
   CalendarCheck,
   Receipt,
   Wallet,
@@ -9,7 +8,6 @@ import {
 
 type SummaryReportProps = {
   newMembers: number;
-  newMemberships: number;
   totalVisits: number;
   totalTransactions: number;
   totalRevenue: number;
@@ -17,7 +15,6 @@ type SummaryReportProps = {
 
 export default function SummaryReport({
   newMembers,
-  newMemberships,
   totalVisits,
   totalTransactions,
   totalRevenue,
@@ -28,11 +25,7 @@ export default function SummaryReport({
       value: newMembers.toLocaleString("id-ID"),
       icon: Users,
     },
-    {
-      label: "Membership Baru",
-      value: newMemberships.toLocaleString("id-ID"),
-      icon: CreditCard,
-    },
+    
     {
       label: "Total Kunjungan",
       value: totalVisits.toLocaleString("id-ID"),
@@ -70,7 +63,7 @@ export default function SummaryReport({
       </div>
 
       {/* KARTU STATISTIK */}
-      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-5">
+      <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {summaryItems.map((item) => {
           const Icon = item.icon;
 

@@ -37,6 +37,22 @@ export default function StockHistory() {
 
   useEffect(() => {
     loadHistory();
+
+    const handleStockHistoryUpdate = () => {
+      void loadHistory();
+    };
+
+    window.addEventListener(
+      "stock-history-updated",
+      handleStockHistoryUpdate
+    );
+
+    return () => {
+      window.removeEventListener(
+        "stock-history-updated",
+        handleStockHistoryUpdate
+      );
+    };
   }, []);
 
   async function loadHistory() {
@@ -245,11 +261,10 @@ export default function StockHistory() {
 
                   <td className="px-4 py-4">
                     <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${
-                        movement.type === "in"
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold ${movement.type === "in"
                           ? "border-green-200 bg-green-50 text-green-700"
                           : "border-red-200 bg-red-50 text-red-700"
-                      }`}
+                        }`}
                     >
                       {movement.type === "in" ? (
                         <ArrowDownToLine size={13} />

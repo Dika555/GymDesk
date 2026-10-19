@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Select from "react-select";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import FeedbackModal from "@/components/ui/FeedbackModal";
@@ -402,50 +403,63 @@ export default function AddProductTransactionForm({
           </p>
         </div>
 
+
         {/* Produk */}
         <div>
           <label className="mb-1 block text-sm font-medium text-zinc-700">
             Produk
           </label>
 
-          <div className="flex gap-2">
-            <select
-              value={productId}
-              onChange={(e) =>
-                setProductId(e.target.value)
-              }
-              className="flex-1 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
-            >
-              <option value="">
-                Pilih produk
-              </option>
-
-              {products.map((product) => (
-                <option
-                  key={product.id}
-                  value={product.id}
-                >
-                  {product.name} —{" "}
-                  {formatRupiah(product.price)} — Stok{" "}
-                  {product.stock}
-                </option>
-              ))}
-            </select>
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <Select
+                options={products.map((product) => ({
+                  value: product.id,
+                  label: `${product.name} — ${formatRupiah(product.price)} — Stok ${product.stock}`,
+                }))}
+                value={
+                  products
+                    .map((product) => ({
+                      value: product.id,
+                      label: `${product.name} — ${formatRupiah(product.price)} — Stok ${product.stock}`,
+                    }))
+                    .find((product) => product.value === productId) ?? null
+                }
+                onChange={(option) => setProductId(option?.value ?? "")}
+                isSearchable
+                isClearable
+                placeholder="Cari nama produk..."
+                noOptionsMessage={() => "Produk tidak ditemukan"}
+                styles={{
+                  control: (base) => ({
+                    ...base,
+                    minHeight: "42px",
+                    borderRadius: "8px",
+                    borderColor: "#d4d4d8",
+                    boxShadow: "none",
+                    fontSize: "14px",
+                  }),
+                  menu: (base) => ({
+                    ...base,
+                    zIndex: 50,
+                  }),
+                }}
+              />
+            </div>
 
             <input
               type="number"
               min="1"
               value={quantity}
-              onChange={(e) =>
-                setQuantity(e.target.value)
-              }
+              onChange={(e) => setQuantity(e.target.value)}
               className="w-20 rounded-lg border border-zinc-300 px-3 py-2 outline-none focus:border-orange-500"
             />
 
             <button
               type="button"
               onClick={addToCart}
-              className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-800"
+              disabled={saving}
+              className="rounded-lg bg-zinc-900 px-4 py-2 font-medium text-white hover:bg-zinc-800 disabled:opacity-50"
             >
               Tambah
             </button>

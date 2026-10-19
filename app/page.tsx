@@ -246,16 +246,17 @@ export default async function DashboardPage() {
         }
 
         const customerName =
-          transaction.customer_name?.toLowerCase() ?? "";
+          transaction.customer_name?.trim().toLowerCase() ?? "";
 
         const notes =
           transaction.notes?.toLowerCase() ?? "";
 
-        const isNonMemberVisitTransaction =
-          customerName.includes("biaya kunjungan non-member") ||
-          notes.includes("biaya kunjungan non-member");
+        // Kecualikan transaksi yang jelas merupakan biaya kunjungan.
+        const isVisitTransaction =
+          notes.includes("biaya kunjungan non-member") ||
+          notes.includes("tanggal kunjungan:");
 
-        if (isNonMemberVisitTransaction) {
+        if (isVisitTransaction) {
           return false;
         }
 

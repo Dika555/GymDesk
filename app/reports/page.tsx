@@ -54,7 +54,6 @@ export default function ReportsPage() {
 
   const [summary, setSummary] = useState({
     newMembers: 0,
-    newMemberships: 0,
     totalVisits: 0,
     totalTransactions: 0,
     totalRevenue: 0,
@@ -222,7 +221,6 @@ export default function ReportsPage() {
 
     setSummary({
       newMembers: newMembers ?? 0,
-      newMemberships: newMemberships ?? 0,
       totalVisits: totalVisits ?? 0,
       totalTransactions: transactions?.length ?? 0,
       totalRevenue,
@@ -334,7 +332,6 @@ export default function ReportsPage() {
       const summaryData = [
         ["Laporan", "Nilai"],
         ["Member Baru", summary.newMembers],
-        ["Membership Baru", summary.newMemberships],
         ["Total Kunjungan", summary.totalVisits],
         ["Total Transaksi", summary.totalTransactions],
         ["Total Pendapatan", summary.totalRevenue],
@@ -866,6 +863,7 @@ export default function ReportsPage() {
     );
   }
 
+
   async function loadTransactionReport() {
     const supabase = createClient();
 
@@ -876,21 +874,20 @@ export default function ReportsPage() {
       return;
     }
 
+    // Ambil transaksi beserta member_id secara langsung
     const { data, error } = await supabase
       .from("transactions")
       .select(`
-      id,
-      transaction_date,
-      transaction_type,
-      payment_method,
-      total_amount,
-      status,
-      notes,
-      customer_name,
-      members (
-        name
-      )
-    `)
+            id,
+            transaction_date,
+            transaction_type,
+            member_id,
+            payment_method,
+            total_amount,
+            status,
+            notes,
+            customer_name
+        `)
       .eq("branch_id", branchId)
       .gte(
         "transaction_date",
@@ -905,10 +902,49 @@ export default function ReportsPage() {
       });
 
     if (error) {
-      console.error("Gagal mengambil data transaksi.");
+      console.error(
+        "Gagal mengambil data transaksi:",
+        error
+      );
       setMessage("Gagal mengambil data transaksi.");
       return;
     }
+
+    // Kumpulkan ID member yang ada di transaksi
+    const memberIds = [
+      ...new Set(
+        (data ?? [])
+          .map((transaction) => transaction.member_id)
+          .filter((id): id is string => Boolean(id))
+      ),
+    ];
+
+    // Ambil nama member langsung dari tabel members
+    const { data: members, error: memberError } =
+      memberIds.length > 0
+        ? await supabase
+          .from("members")
+          .select("id, name")
+          .in("id", memberIds)
+          .eq("branch_id", branchId)
+        : { data: [], error: null };
+
+    if (memberError) {
+      console.error(
+        "Gagal mengambil nama member:",
+        memberError
+      );
+      setMessage("Gagal mengambil nama member.");
+      return;
+    }
+
+    // Pasangkan ID member dengan namanya
+    const memberNameMap = new Map(
+      (members ?? []).map((member) => [
+        member.id,
+        member.name,
+      ])
+    );
 
     const formattedTransactions = (data ?? []).map(
       (transaction) => ({
@@ -916,11 +952,15 @@ export default function ReportsPage() {
         transactionDate: transaction.transaction_date,
         transactionType: transaction.transaction_type,
         memberName:
-          transaction.members?.[0]?.name ??
+          (transaction.member_id
+            ? memberNameMap.get(transaction.member_id)
+            : null) ??
           transaction.customer_name ??
           "Non-member",
         paymentMethod: transaction.payment_method,
-        totalAmount: Number(transaction.total_amount ?? 0),
+        totalAmount: Number(
+          transaction.total_amount ?? 0
+        ),
         status: transaction.status,
         notes: transaction.notes,
       })
@@ -928,6 +968,7 @@ export default function ReportsPage() {
 
     setTransactionReport(formattedTransactions);
   }
+
 
   async function loadProductReport() {
     const supabase = createClient();
@@ -1314,7 +1355,6 @@ export default function ReportsPage() {
       {selectedReports.includes("summary") && showReport && (
         <SummaryReport
           newMembers={summary.newMembers}
-          newMemberships={summary.newMemberships}
           totalVisits={summary.totalVisits}
           totalTransactions={summary.totalTransactions}
           totalRevenue={summary.totalRevenue}

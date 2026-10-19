@@ -61,44 +61,29 @@ export default function AddMemberForm({
     }
   }, [member]);
 
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!name.trim()) {
-      onFeedback(
-        "Data Belum Lengkap",
-        "Nama member wajib diisi.",
-        "warning"
-      );
+      onFeedback("Data Belum Lengkap", "Nama member wajib diisi.", "warning");
       return;
     }
 
     if (!phone.trim()) {
-      onFeedback(
-        "Data Belum Lengkap",
-        "Nomor HP wajib diisi.",
-        "warning"
-      );
+      onFeedback("Data Belum Lengkap", "Nomor HP wajib diisi.", "warning");
       return;
     }
 
     if (!isEditing && (!registrationFee || Number(registrationFee) < 0)) {
-      onFeedback(
-        "Biaya Tidak Valid",
-        "Biaya pendaftaran harus berupa angka nol atau lebih.",
-        "warning"
-      );
+      onFeedback("Biaya Tidak Valid", "Biaya pendaftaran harus berupa angka nol atau lebih.", "warning");
       return;
     }
 
     const branchId = getActiveBranchId();
 
     if (!branchId) {
-      onFeedback(
-        "Cabang Belum Dipilih",
-        "Silakan pilih cabang aktif terlebih dahulu.",
-        "warning"
-      );
+      onFeedback("Cabang Belum Dipilih", "Silakan pilih cabang aktif terlebih dahulu.", "warning");
       return;
     }
 
@@ -106,13 +91,37 @@ export default function AddMemberForm({
 
     try {
       const supabase = createClient();
+      const cleanPhone = phone.trim();
 
+      // Proses edit member
       if (isEditing && member) {
+        const { data: existingMember, error: checkError } = await supabase
+          .from("members")
+          .select("id")
+          .eq("branch_id", branchId)
+          .eq("phone", cleanPhone)
+          .neq("id", member.id)
+          .maybeSingle();
+
+        if (checkError) {
+          onFeedback("Gagal Memeriksa Nomor HP", "Silakan coba lagi.", "error");
+          return;
+        }
+
+        if (existingMember) {
+          onFeedback(
+            "Nomor HP Sudah Digunakan",
+            "Nomor HP ini sudah dipakai member lain di cabang ini.",
+            "warning"
+          );
+          return;
+        }
+
         const { error } = await supabase
           .from("members")
           .update({
             name: name.trim(),
-            phone: phone.trim(),
+            phone: cleanPhone,
             email: email.trim() || null,
             gender: gender || null,
             address: address.trim() || null,
@@ -121,12 +130,13 @@ export default function AddMemberForm({
           .eq("branch_id", branchId);
 
         if (error) {
-          console.error("Gagal mengubah data member:", error);
-
+          const duplicate = error.code === "23505";
           onFeedback(
-            "Gagal Menyimpan",
-            "Data member gagal diubah. Silakan coba lagi.",
-            "error"
+            duplicate ? "Nomor HP Sudah Digunakan" : "Gagal Menyimpan",
+            duplicate
+              ? "Nomor HP ini sudah dipakai member lain di cabang ini."
+              : "Data member gagal diubah. Silakan coba lagi.",
+            duplicate ? "warning" : "error"
           );
           return;
         }
@@ -135,27 +145,29 @@ export default function AddMemberForm({
         return;
       }
 
-      const { error } = await supabase.rpc(
-        "create_member_registration",
-        {
-          p_branch_id: branchId,
-          p_name: name.trim(),
-          p_phone: phone.trim(),
-          p_email: email.trim(),
-          p_gender: gender,
-          p_address: address.trim(),
-          p_registration_fee: Number(registrationFee),
-          p_payment_method: paymentMethod,
-        }
-      );
+      // Proses tambah member
+      const { error } = await supabase.rpc("create_member_registration", {
+        p_branch_id: branchId,
+        p_name: name.trim(),
+        p_phone: cleanPhone,
+        p_email: email.trim(),
+        p_gender: gender,
+        p_address: address.trim(),
+        p_registration_fee: Number(registrationFee),
+        p_payment_method: paymentMethod,
+      });
 
       if (error) {
-        console.error("Gagal mendaftarkan member:", error);
+        const duplicate =
+          error.message?.includes("Nomor HP sudah digunakan") ||
+          error.code === "23505";
 
         onFeedback(
-          "Gagal Mendaftarkan Member",
-          error.message || "Terjadi kesalahan saat mendaftarkan member.",
-          "error"
+          duplicate ? "Nomor HP Sudah Digunakan" : "Gagal Mendaftarkan Member",
+          duplicate
+            ? "Nomor HP ini sudah dipakai member lain di cabang ini."
+            : error.message || "Terjadi kesalahan saat mendaftarkan member.",
+          duplicate ? "warning" : "error"
         );
         return;
       }
@@ -163,7 +175,6 @@ export default function AddMemberForm({
       onSuccess();
     } catch (error) {
       console.error("Terjadi kesalahan:", error);
-
       onFeedback(
         "Terjadi Kesalahan",
         "Terjadi kesalahan saat menyimpan data member. Silakan coba lagi.",

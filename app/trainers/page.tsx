@@ -73,6 +73,7 @@ export default function TrainersPage() {
     loadTrainers();
   }, []);
 
+
   async function addTrainer(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
@@ -80,23 +81,17 @@ export default function TrainersPage() {
 
     const formData = new FormData(e.currentTarget);
 
-    const trainerName = String(
-      formData.get("name") ?? "",
-    ).trim();
-
-    const trainerPhone = String(
-      formData.get("phone") ?? "",
-    ).trim();
-
+    const trainerName = String(formData.get("name") ?? "").trim();
+    const trainerPhone = String(formData.get("phone") ?? "").trim();
     const trainerSpecialization = String(
-      formData.get("specialization") ?? "",
+      formData.get("specialization") ?? ""
     ).trim();
 
-    if (!trainerName) {
+    if (!trainerName || !trainerPhone || !trainerSpecialization) {
       showFeedback(
-        "Nama Belum Diisi",
-        "Nama trainer wajib diisi.",
-        "warning",
+        "Data Belum Lengkap",
+        "Nama, nomor HP, dan spesialisasi wajib diisi.",
+        "warning"
       );
       return;
     }
@@ -107,7 +102,7 @@ export default function TrainersPage() {
       showFeedback(
         "Cabang Belum Dipilih",
         "Pilih cabang aktif sebelum menambahkan trainer.",
-        "warning",
+        "warning"
       );
       return;
     }
@@ -117,38 +112,73 @@ export default function TrainersPage() {
     try {
       const supabase = createClient();
 
-      const { error } = await supabase
+      // Periksa apakah nomor HP sudah digunakan di cabang aktif.
+      const { data: existingTrainer, error: checkError } = await supabase
         .from("trainers")
-        .insert({
-          name: trainerName,
-          phone: trainerPhone,
-          specialization: trainerSpecialization,
-          branch_id: branchId,
-        });
+        .select("id")
+        .eq("branch_id", branchId)
+        .eq("phone", trainerPhone)
+        .maybeSingle();
 
-      if (error) {
-        console.error("Gagal menambahkan trainer:", error);
+      if (checkError) {
+        console.error("Gagal memeriksa nomor HP trainer:", checkError);
 
         showFeedback(
-          "Gagal Menambahkan Trainer",
-          "Data trainer belum berhasil disimpan. Silakan coba lagi.",
-          "error",
+          "Gagal Memeriksa Nomor HP",
+          "Nomor HP belum dapat diperiksa. Silakan coba lagi.",
+          "error"
         );
         return;
       }
 
-      setIsOpen(false);
+      if (existingTrainer) {
+        showFeedback(
+          "Nomor HP Sudah Digunakan",
+          "Nomor HP ini sudah dipakai trainer lain di cabang ini.",
+          "warning"
+        );
+        return;
+      }
 
+      const { error } = await supabase.from("trainers").insert({
+        name: trainerName,
+        phone: trainerPhone,
+        specialization: trainerSpecialization,
+        branch_id: branchId,
+      });
+
+      if (error) {
+        console.error("Gagal menambahkan trainer:", error);
+
+        if (error.code === "23505") {
+          showFeedback(
+            "Nomor HP Sudah Digunakan",
+            "Nomor HP ini sudah dipakai trainer lain di cabang ini.",
+            "warning"
+          );
+        } else {
+          showFeedback(
+            "Gagal Menambahkan Trainer",
+            "Data trainer belum berhasil disimpan. Silakan coba lagi.",
+            "error"
+          );
+        }
+
+        return;
+      }
+
+      setIsOpen(false);
       setName("");
       setPhone("");
       setSpecialization("");
+      setPricePerSession("");
 
       await loadTrainers();
 
       showFeedback(
         "Trainer Berhasil Ditambahkan",
         "Data trainer berhasil disimpan.",
-        "success",
+        "success"
       );
     } catch (error) {
       console.error("Terjadi kesalahan saat menambahkan trainer:", error);
@@ -156,12 +186,13 @@ export default function TrainersPage() {
       showFeedback(
         "Terjadi Kesalahan",
         "Trainer gagal ditambahkan. Silakan coba lagi.",
-        "error",
+        "error"
       );
     } finally {
       setLoading(false);
     }
   }
+
 
   async function loadTrainers() {
     const supabase = createClient();

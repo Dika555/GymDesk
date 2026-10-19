@@ -1295,21 +1295,32 @@ export default function TrainerDetailPage({
         if (!editingPackageId) return;
 
         if (!packageName.trim()) {
-            alert("Nama paket harus diisi.");
+            setFeedback({
+                open: true,
+                title: "Validasi Gagal",
+                message: "Nama paket harus diisi.",
+                type: "error",
+            });
             return;
         }
 
         if (Number(packageSessionCount) <= 0) {
-            alert(
-                "Jumlah sesi harus lebih dari 0."
-            );
+            setFeedback({
+                open: true,
+                title: "Validasi Gagal",
+                message: "Jumlah sesi harus lebih dari 0.",
+                type: "error",
+            });
             return;
         }
 
         if (Number(packagePrice) < 0) {
-            alert(
-                "Harga tidak boleh kurang dari 0."
-            );
+            setFeedback({
+                open: true,
+                title: "Validasi Gagal",
+                message: "Harga tidak boleh kurang dari 0.",
+                type: "error",
+            });
             return;
         }
 
@@ -1321,8 +1332,7 @@ export default function TrainerDetailPage({
             .from("trainer_packages")
             .update({
                 name: packageName.trim(),
-                session_count:
-                    Number(packageSessionCount),
+                session_count: Number(packageSessionCount),
                 price: Number(packagePrice),
             })
             .eq("id", editingPackageId);
@@ -1333,10 +1343,12 @@ export default function TrainerDetailPage({
                 error
             );
 
-            alert(
-                "Gagal mengubah paket: " +
-                error.message
-            );
+            setFeedback({
+                open: true,
+                title: "Gagal Mengubah Paket",
+                message: "Gagal mengubah paket: " + error.message,
+                type: "error",
+            });
 
             setSavingPackage(false);
             return;
@@ -1353,9 +1365,12 @@ export default function TrainerDetailPage({
         setIsPackageFormOpen(false);
         setSavingPackage(false);
 
-        alert(
-            "Paket berhasil diperbarui."
-        );
+        setFeedback({
+            open: true,
+            title: "Berhasil",
+            message: "Paket berhasil diperbarui.",
+            type: "success",
+        });
     }
 
     /* =========================
