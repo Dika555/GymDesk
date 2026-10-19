@@ -7,18 +7,12 @@ export async function GET(request: NextRequest) {
     const code = url.searchParams.get("code");
     const next = url.searchParams.get("next");
 
-    const allowedDestinations = [
-        "/set-password",
-        "/reset-password",
-    ];
-
     const destination =
-        next === "/reset-password"
-            ? "/reset-password?recovery=1"
-            : next === "/set-password"
-                ? "/set-password?invite=1"
+        next === "/set-password"
+            ? "/set-password?invite=1"
+            : next === "/reset-password"
+                ? "/reset-password?recovery=1"
                 : "/login";
-
 
     if (!code) {
         return NextResponse.redirect(
@@ -28,16 +22,15 @@ export async function GET(request: NextRequest) {
 
     const supabase = await createClient();
 
-    const { error } =
-        await supabase.auth.exchangeCodeForSession(code);
+    const { error } = await supabase.auth.exchangeCodeForSession(code);
 
     if (error) {
+        console.error("Auth callback error:", error.message);
+
         return NextResponse.redirect(
             new URL("/login?error=verification_failed", url.origin)
         );
     }
 
-    return NextResponse.redirect(
-        new URL(destination, url.origin)
-    );
+    return NextResponse.redirect(new URL(destination, url.origin));
 }

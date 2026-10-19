@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
@@ -10,6 +10,61 @@ export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [supabase] = useState(() => createClient());
+
+
+  useEffect(() => {
+    const hashParams = new URLSearchParams(
+      window.location.hash.substring(1)
+    );
+
+    const isInvite = hashParams.get("type") === "invite";
+
+    if (!isInvite) return;
+
+    let cancelled = false;
+
+
+    async function handleInvite() {
+      const hashParams = new URLSearchParams(
+        window.location.hash.substring(1)
+      );
+
+      const accessToken = hashParams.get("access_token");
+      const refreshToken = hashParams.get("refresh_token");
+
+      if (!accessToken || !refreshToken) {
+        console.error("Token undangan tidak ditemukan.");
+        return;
+      }
+
+      const { error } = await supabase.auth.setSession({
+        access_token: accessToken,
+        refresh_token: refreshToken,
+      });
+
+      if (cancelled) return;
+
+      if (error) {
+        console.error("Gagal mengaktifkan sesi undangan.");
+        return;
+      }
+
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search
+      );
+
+      router.replace("/set-password?invite=1");
+    }
+
+
+    handleInvite();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, supabase]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

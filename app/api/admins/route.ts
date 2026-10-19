@@ -148,7 +148,7 @@ export async function POST(request: Request) {
         cleanEmail,
         {
           data: { name: cleanName },
-          redirectTo: `${siteUrl}/auth/callback?next=/set-password`,
+          redirectTo: `${siteUrl}/auth/callback?next=%2Fset-password`
         }
       );
 
