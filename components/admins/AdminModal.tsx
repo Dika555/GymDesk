@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import AdminForm from "@/components/admins/AdminForm";
 import Modal from "@/components/ui/Modal";
 
@@ -20,19 +21,15 @@ type Admin = {
 type Props = {
   editingAdmin: Admin | null;
   branches: Branch[];
-
   name: string;
   email: string;
-  password: string;
   branchId: string;
-
   onNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
-  onPasswordChange: (value: string) => void;
   onBranchChange: (value: string) => void;
-
-  onSubmit: (event: React.FormEvent<HTMLFormElement>) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
   onClose: () => void;
+  isSubmitting?: boolean;
 };
 
 export default function AdminModal({
@@ -40,14 +37,13 @@ export default function AdminModal({
   branches,
   name,
   email,
-  password,
   branchId,
   onNameChange,
   onEmailChange,
-  onPasswordChange,
   onBranchChange,
   onSubmit,
   onClose,
+  isSubmitting = false,
 }: Props) {
   return (
     <Modal
@@ -58,17 +54,23 @@ export default function AdminModal({
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50"
+            disabled={isSubmitting}
+            className="flex-1 rounded-lg border border-zinc-300 px-4 py-2 font-medium text-zinc-700 hover:bg-zinc-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Batal
           </button>
 
-          <button
+<button
             type="submit"
             form="admin-form"
-            className="flex-1 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600"
+            disabled={isSubmitting}
+            className="flex-1 rounded-lg bg-orange-500 px-4 py-2 font-medium text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {editingAdmin ? "Simpan Perubahan" : "Buat Admin"}
+            {isSubmitting
+              ? "Memproses..."
+              : editingAdmin
+                ? "Simpan Perubahan"
+                : "Kirim Undangan"}
           </button>
         </div>
       }
@@ -78,11 +80,9 @@ export default function AdminModal({
         branches={branches}
         name={name}
         email={email}
-        password={password}
         branchId={branchId}
         onNameChange={onNameChange}
         onEmailChange={onEmailChange}
-        onPasswordChange={onPasswordChange}
         onBranchChange={onBranchChange}
         onSubmit={onSubmit}
       />

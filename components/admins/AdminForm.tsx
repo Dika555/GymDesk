@@ -1,6 +1,6 @@
+
 "use client";
 
-import { useState } from "react";
 import type { FormEvent } from "react";
 
 type Branch = {
@@ -20,17 +20,12 @@ type Admin = {
 type Props = {
   editingAdmin: Admin | null;
   branches: Branch[];
-
   name: string;
   email: string;
-  password: string;
   branchId: string;
-
   onNameChange: (value: string) => void;
   onEmailChange: (value: string) => void;
-  onPasswordChange: (value: string) => void;
   onBranchChange: (value: string) => void;
-
   onSubmit: (event: FormEvent<HTMLFormElement>) => void;
 };
 
@@ -39,16 +34,12 @@ export default function AdminForm({
   branches,
   name,
   email,
-  password,
   branchId,
   onNameChange,
   onEmailChange,
-  onPasswordChange,
   onBranchChange,
   onSubmit,
 }: Props) {
-  const [showPassword, setShowPassword] = useState(false);
-
   return (
     <form
       id="admin-form"
@@ -65,6 +56,8 @@ export default function AdminForm({
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
           placeholder="Contoh: Budi"
+          minLength={2}
+          maxLength={100}
           className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 outline-none focus:border-orange-500"
           required
         />
@@ -72,7 +65,7 @@ export default function AdminForm({
 
       <div>
         <label className="mb-2 block text-sm font-medium">
-          Email
+          Email Gmail
         </label>
 
         {editingAdmin ? (
@@ -82,92 +75,30 @@ export default function AdminForm({
             </div>
 
             <p className="mt-1.5 text-xs text-zinc-500">
-              Email tidak dapat diubah setelah akun admin dibuat.
+              Email tidak dapat diubah setelah akun Admin dibuat.
             </p>
           </>
         ) : (
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => onEmailChange(e.target.value)}
-            placeholder="admin@gmail.com"
-            className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 outline-none focus:border-orange-500"
-            required
-          />
-        )}
-      </div>
-
-      {!editingAdmin && (
-        <div>
-          <label className="mb-2 block text-sm font-medium">
-            Password Awal
-          </label>
-
-          <div className="relative">
+          <>
             <input
-              type={showPassword ? "text" : "password"}
-              value={password}
-              onChange={(e) => onPasswordChange(e.target.value)}
-              placeholder="Minimal 6 karakter"
-              minLength={6}
-              className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 pr-12 outline-none focus:border-orange-500"
+              type="email"
+              value={email}
+              onChange={(e) => onEmailChange(e.target.value)}
+              placeholder="admin@gmail.com"
+              maxLength={254}
+              pattern="[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com"
+              title="Gunakan alamat email yang berakhiran @gmail.com"
+              className="w-full rounded-lg border border-zinc-300 px-4 py-2.5 outline-none focus:border-orange-500"
               required
             />
 
-            <button
-              type="button"
-              onClick={() => setShowPassword((prev) => !prev)}
-              aria-label={
-                showPassword ? "Sembunyikan password" : "Tampilkan password"
-              }
-              title={
-                showPassword ? "Sembunyikan password" : "Tampilkan password"
-              }
-              className="absolute inset-y-0 right-0 flex items-center px-4 text-zinc-500 transition-colors hover:text-orange-600"
-            >
-              {showPassword ? (
-                // Ikon mata dicoret
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M3 3l18 18" />
-                  <path d="M10.58 10.58a2 2 0 002.83 2.83" />
-                  <path d="M9.88 5.09A10.77 10.77 0 0112 4.88c5 0 8.27 4.11 9 7.12a9.65 9.65 0 01-2.1 3.67" />
-                  <path d="M6.61 6.61A11.76 11.76 0 003 12c.73 3.01 4 7.12 9 7.12a10.5 10.5 0 004.12-.84" />
-                </svg>
-              ) : (
-                // Ikon mata
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M2.5 12s3.5-7 9.5-7 9.5 7 9.5 7-3.5 7-9.5 7-9.5-7-9.5-7z" />
-                  <circle cx="12" cy="12" r="3" />
-                </svg>
-              )}
-            </button>
-          </div>
-
-          <p className="mt-1.5 text-xs text-zinc-500">
-            Password minimal 6 karakter.
-          </p>
-        </div>
-      )}
+            <p className="mt-1.5 text-xs text-zinc-500">
+              Gunakan Gmail yang aktif dan bisa dibuka oleh Admin.
+              Tautan undangan akan dikirim ke alamat ini.
+            </p>
+          </>
+        )}
+      </div>
 
       <div>
         <label className="mb-2 block text-sm font-medium">
@@ -189,6 +120,19 @@ export default function AdminForm({
           ))}
         </select>
       </div>
+
+      {!editingAdmin && (
+        <div className="rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-900">
+          <p className="font-medium">
+            Password dibuat oleh Admin
+          </p>
+          <p className="mt-1">
+            Setelah menerima undangan, Admin membuka email dan
+            mengikuti petunjuk untuk mengaktifkan akun serta
+            membuat password sendiri.
+          </p>
+        </div>
+      )}
     </form>
   );
 }

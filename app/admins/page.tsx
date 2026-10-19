@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
@@ -58,7 +59,6 @@ export default function AdminsPage() {
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [branchId, setBranchId] = useState("");
 
   const [confirmAdmin, setConfirmAdmin] = useState<Admin | null>(null);
@@ -74,51 +74,36 @@ export default function AdminsPage() {
     message: string,
     type: FeedbackType
   ) {
-    setFeedback({
-      open: true,
-      title,
-      message,
-      type,
-    });
+    setFeedback({ open: true, title, message, type });
   }
 
   const loadData = useCallback(async () => {
     setLoading(true);
 
     try {
-      // Periksa user yang sedang login.
       const {
         data: { user },
         error: authError,
       } = await supabase.auth.getUser();
 
       if (authError || !user) {
-        console.error("User belum login:", authError);
         setAuthorized(false);
         return;
       }
 
-      // Periksa role user.
       const { data: profile, error: profileError } = await supabase
         .from("users")
         .select("role")
         .eq("id", user.id)
         .single();
 
-      if (profileError || !profile) {
-        console.error("Gagal mengambil profile:", profileError);
-        setAuthorized(false);
-        return;
-      }
-
-      if (profile.role !== "super_admin") {
+      if (profileError || profile?.role !== "super_admin") {
         setAuthorized(false);
         return;
       }
 
       setAuthorized(true);
 
-      // Ambil data admin.
       const { data: adminData, error: adminError } = await supabase
         .from("users")
         .select("id, name, email, role, branch_id, is_active")
@@ -126,7 +111,6 @@ export default function AdminsPage() {
         .order("name");
 
       if (adminError) {
-        console.error("Gagal mengambil admin:", adminError);
         showFeedback(
           "Gagal Memuat Admin",
           "Data admin tidak dapat dimuat. Silakan coba lagi.",
@@ -135,14 +119,12 @@ export default function AdminsPage() {
         return;
       }
 
-      // Ambil data cabang.
       const { data: branchData, error: branchError } = await supabase
         .from("branches")
         .select("id, name")
         .order("name");
 
       if (branchError) {
-        console.error("Gagal mengambil cabang:", branchError);
         showFeedback(
           "Gagal Memuat Cabang",
           "Data cabang tidak dapat dimuat dengan benar.",
@@ -153,8 +135,7 @@ export default function AdminsPage() {
 
       setAdmins(adminData ?? []);
       setBranches(branchData ?? []);
-    } catch (error) {
-      console.error("Terjadi kesalahan saat memuat data:", error);
+    } catch {
       showFeedback(
         "Terjadi Kesalahan",
         "Data admin gagal dimuat. Periksa koneksi lalu coba lagi.",
@@ -173,7 +154,6 @@ export default function AdminsPage() {
     setEditingAdmin(null);
     setName("");
     setEmail("");
-    setPassword("");
     setBranchId("");
     setShowForm(true);
   }
@@ -182,7 +162,6 @@ export default function AdminsPage() {
     setEditingAdmin(admin);
     setName(admin.name);
     setEmail(admin.email);
-    setPassword("");
     setBranchId(admin.branch_id ?? "");
     setShowForm(true);
   }
@@ -194,7 +173,14 @@ export default function AdminsPage() {
     setEditingAdmin(null);
     setName("");
     setEmail("");
-    setPassword("");
+    setBranchId("");
+  }
+
+  function closeFormAfterSave() {
+    setShowForm(false);
+    setEditingAdmin(null);
+    setName("");
+    setEmail("");
     setBranchId("");
   }
 
@@ -206,9 +192,8 @@ export default function AdminsPage() {
     if (savingAdmin) return;
 
     const trimmedName = name.trim();
-    const trimmedEmail = email.trim();
+    const trimmedEmail = email.trim().toLowerCase();
 
-    // Validasi data
     if (
       !trimmedName ||
       !branchId ||
@@ -216,17 +201,21 @@ export default function AdminsPage() {
     ) {
       showFeedback(
         "Data Belum Lengkap",
-        "Nama dan cabang wajib diisi. Email diperlukan untuk membuat admin baru.",
+        "Nama dan cabang wajib diisi. Email Gmail diperlukan untuk membuat Admin baru.",
         "warning"
       );
       return;
     }
 
-    // Validasi password untuk admin baru
-    if (!editingAdmin && password.length < 6) {
+    if (
+      !editingAdmin &&
+      !/^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@gmail\.com$/i.test(
+        trimmedEmail
+      )
+    ) {
       showFeedback(
-        "Password Tidak Valid",
-        "Password awal minimal 6 karakter.",
+        "Email Tidak Valid",
+        "Gunakan alamat email yang berakhiran @gmail.com.",
         "warning"
       );
       return;
@@ -236,7 +225,6 @@ export default function AdminsPage() {
 
     try {
       if (editingAdmin) {
-        // Edit admin: email tidak ikut diperbarui.
         const { error } = await supabase
           .from("users")
           .update({
@@ -247,11 +235,9 @@ export default function AdminsPage() {
           .eq("role", "admin");
 
         if (error) {
-          console.error("Gagal memperbarui admin:", error);
-
           showFeedback(
             "Gagal Memperbarui Admin",
-            error.message,
+            "Data Admin gagal diperbarui. Silakan coba lagi.",
             "error"
           );
           return;
@@ -261,11 +247,10 @@ export default function AdminsPage() {
 
         showFeedback(
           "Admin Berhasil Diperbarui",
-          `Data admin "${trimmedName}" berhasil diperbarui.`,
+          `Data Admin "${trimmedName}" berhasil diperbarui.`,
           "success"
         );
       } else {
-        // Tambah admin: email tetap digunakan untuk membuat akun.
         const response = await fetch("/api/admins", {
           method: "POST",
           headers: {
@@ -274,7 +259,6 @@ export default function AdminsPage() {
           body: JSON.stringify({
             name: trimmedName,
             email: trimmedEmail,
-            password,
             branch_id: branchId,
           }),
         });
@@ -283,8 +267,8 @@ export default function AdminsPage() {
 
         if (!response.ok) {
           showFeedback(
-            "Gagal Membuat Admin",
-            result.error || "Akun admin gagal dibuat.",
+            "Undangan Gagal Dikirim",
+            result.error || "Undangan Admin gagal dikirim.",
             "error"
           );
           return;
@@ -293,22 +277,18 @@ export default function AdminsPage() {
         closeFormAfterSave();
 
         showFeedback(
-          "Admin Berhasil Dibuat",
-          `Akun admin "${trimmedName}" berhasil dibuat.`,
+          "Undangan Admin Terkirim",
+          result.message ||
+            `Undangan telah dikirim ke ${trimmedEmail}. Admin perlu membuka email untuk melanjutkan aktivasi.`,
           "success"
         );
       }
 
       await loadData();
-    } catch (error) {
-      console.error(
-        "Terjadi kesalahan saat menyimpan admin:",
-        error
-      );
-
+    } catch {
       showFeedback(
         "Terjadi Kesalahan",
-        "Admin gagal disimpan. Periksa koneksi lalu coba lagi.",
+        "Perubahan gagal disimpan. Periksa koneksi lalu coba lagi.",
         "error"
       );
     } finally {
@@ -316,18 +296,8 @@ export default function AdminsPage() {
     }
   }
 
-  function closeFormAfterSave() {
-    setShowForm(false);
-    setEditingAdmin(null);
-    setName("");
-    setEmail("");
-    setPassword("");
-    setBranchId("");
-  }
-
   function getBranchName(id: string | null) {
     if (!id) return "-";
-
     return branches.find((branch) => branch.id === id)?.name ?? "-";
   }
 
@@ -347,11 +317,10 @@ export default function AdminsPage() {
         .eq("role", "admin");
 
       if (error) {
-        console.error("Gagal mengubah status admin:", error);
         setConfirmAdmin(null);
         showFeedback(
           "Gagal Mengubah Status",
-          error.message,
+          "Status Admin gagal diubah. Silakan coba lagi.",
           "error"
         );
         return;
@@ -361,18 +330,18 @@ export default function AdminsPage() {
 
       showFeedback(
         newStatus ? "Admin Diaktifkan" : "Admin Dinonaktifkan",
-        `Akun admin "${admin.name}" berhasil ${newStatus ? "diaktifkan" : "dinonaktifkan"
+        `Akun Admin "${admin.name}" berhasil ${
+          newStatus ? "diaktifkan" : "dinonaktifkan"
         }.`,
         "success"
       );
 
       await loadData();
-    } catch (error) {
-      console.error("Terjadi kesalahan saat mengubah status:", error);
+    } catch {
       setConfirmAdmin(null);
       showFeedback(
         "Terjadi Kesalahan",
-        "Status admin gagal diubah. Silakan coba lagi.",
+        "Status Admin gagal diubah. Silakan coba lagi.",
         "error"
       );
     } finally {
@@ -405,7 +374,6 @@ export default function AdminsPage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 sm:p-8">
-      {/* Header halaman */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-4">
           <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
@@ -417,7 +385,7 @@ export default function AdminsPage() {
               Kelola Admin
             </h1>
             <p className="mt-1 text-sm text-zinc-500 sm:text-base">
-              Kelola akun admin dan cabang yang dikelola.
+              Kelola akun Admin dan cabang yang dikelola.
             </p>
           </div>
         </div>
@@ -455,14 +423,13 @@ export default function AdminsPage() {
               branches={branches}
               name={name}
               email={email}
-              password={password}
               branchId={branchId}
               onNameChange={setName}
               onEmailChange={setEmail}
-              onPasswordChange={setPassword}
               onBranchChange={setBranchId}
               onSubmit={handleSubmit}
               onClose={closeForm}
+              isSubmitting={savingAdmin}
             />
           )}
 
@@ -495,7 +462,7 @@ export default function AdminsPage() {
           <section className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
             {loading ? (
               <div className="p-6 text-sm text-zinc-500">
-                Memuat data admin...
+                Memuat data Admin...
               </div>
             ) : (
               <div className="overflow-x-auto">
@@ -530,7 +497,7 @@ export default function AdminsPage() {
                         >
                           {search || statusFilter !== "all"
                             ? "Admin tidak ditemukan."
-                            : "Belum ada data admin."}
+                            : "Belum ada data Admin."}
                         </td>
                       </tr>
                     ) : (
@@ -563,10 +530,11 @@ export default function AdminsPage() {
 
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${admin.is_active
-                                ? "bg-green-50 text-green-700 ring-green-200"
-                                : "bg-red-50 text-red-700 ring-red-200"
-                                }`}
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
+                                admin.is_active
+                                  ? "bg-green-50 text-green-700 ring-green-200"
+                                  : "bg-red-50 text-red-700 ring-red-200"
+                              }`}
                             >
                               {admin.is_active ? "Aktif" : "Nonaktif"}
                             </span>
@@ -587,10 +555,11 @@ export default function AdminsPage() {
                                 type="button"
                                 onClick={() => setConfirmAdmin(admin)}
                                 disabled={changingStatus !== null}
-                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${admin.is_active
-                                  ? "border-red-200 text-red-600 hover:bg-red-50"
-                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                  }`}
+                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
+                                  admin.is_active
+                                    ? "border-red-200 text-red-600 hover:bg-red-50"
+                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                }`}
                               >
                                 {admin.is_active ? (
                                   <PowerOff size={14} />
@@ -622,7 +591,6 @@ export default function AdminsPage() {
         </>
       )}
 
-      {/* Konfirmasi status admin */}
       {confirmAdmin && (
         <Modal
           title={
@@ -649,10 +617,11 @@ export default function AdminsPage() {
                 type="button"
                 onClick={() => void handleToggleStatus()}
                 disabled={changingStatus !== null}
-                className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${confirmAdmin.is_active
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-emerald-600 hover:bg-emerald-700"
-                  }`}
+                className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${
+                  confirmAdmin.is_active
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-emerald-600 hover:bg-emerald-700"
+                }`}
               >
                 {changingStatus
                   ? "Memproses..."
@@ -668,22 +637,22 @@ export default function AdminsPage() {
             <span className="font-semibold">
               {confirmAdmin.is_active ? "menonaktifkan" : "mengaktifkan"}
             </span>{" "}
-            akun admin{" "}
+            akun Admin{" "}
             <span className="font-semibold text-zinc-900">
               &quot;{confirmAdmin.name}&quot;
             </span>
             ?
           </p>
+
           {confirmAdmin.is_active && (
             <p className="mt-3 text-sm leading-6 text-amber-700">
-              Pastikan admin tersebut memang perlu dinonaktifkan sebelum
+              Pastikan Admin tersebut memang perlu dinonaktifkan sebelum
               melanjutkan.
             </p>
           )}
         </Modal>
       )}
 
-      {/* Notifikasi */}
       <FeedbackModal
         open={feedback.open}
         title={feedback.title}

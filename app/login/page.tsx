@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import LoadingScreen from "@/components/ui/LoadingScreen";
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
+  const searchParams = useSearchParams();
+  const [supabase] = useState(() => createClient());
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -23,6 +25,13 @@ export default function LoginPage() {
       />
     );
   }
+
+  const passwordMessage =
+    searchParams.get("passwordSet") === "success"
+      ? "Password berhasil dibuat. Silakan login."
+      : searchParams.get("passwordReset") === "success"
+        ? "Password berhasil direset. Silakan login dengan password baru."
+        : "";
 
   async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -508,6 +517,24 @@ export default function LoginPage() {
                 </div>
 
               </div>
+
+              <div className="flex justify-end">
+                <Link
+                  href="/forgot-password"
+                  className="text-sm font-medium text-orange-600 transition hover:text-orange-700"
+                >
+                  Lupa Password?
+                </Link>
+              </div>
+
+              {passwordMessage && (
+                <div
+                  role="status"
+                  className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700"
+                >
+                  {passwordMessage}
+                </div>
+              )}
 
 
               {/* Error Message */}
