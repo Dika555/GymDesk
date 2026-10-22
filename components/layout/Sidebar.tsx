@@ -24,7 +24,9 @@ const menuItems = [
 const superAdminMenuItems = [
   { name: "Kelola Admin", href: "/admins" },
   { name: "Kelola Cabang", href: "/branches" },
+  { name: "Log Aktivitas", href: "/activity-logs" },
 ];
+
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -159,7 +161,7 @@ export default function Sidebar() {
         </div>
 
         {/* Menu */}
-        <nav className="min-h-0 flex-1 overflow-y-hidden px-3 py-3 lg:px-4 lg:py-6">
+        <nav className="sidebar-scroll min-h-0 flex-1 overflow-y-auto px-3 py-3 lg:px-4 lg:py-6">
           <div className="space-y-1">
 
             {menuItems.map((item) => {

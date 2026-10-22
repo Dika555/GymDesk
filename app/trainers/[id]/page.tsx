@@ -15,6 +15,7 @@ import TrainerEditModal from "@/components/trainers/[id]/TrainerEditModal";
 import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 import type {
     Trainer,
     TrainerPackage,
@@ -440,6 +441,12 @@ export default function TrainerDetailPage({
                             return;
                         }
 
+                        await logActivity({
+                            action: "DELETE",
+                            description: `Menghapus trainer: ${foundTrainer.name}`,
+                            branchId,
+                        });
+
                         showFeedback(
                             "Berhasil",
                             "Trainer berhasil dihapus.",
@@ -816,6 +823,21 @@ export default function TrainerDetailPage({
                 return;
             }
 
+            const branchId = getActiveBranchId();
+
+            if (branchId) {
+                const memberName =
+                    availableMembers.find(
+                        (member) => member.id === selectedMemberId
+                    )?.name ?? "Member";
+
+                await logActivity({
+                    action: "CREATE",
+                    description: `Menambahkan member "${memberName}" ke daftar trainer "${trainer?.name ?? "Trainer"}"`,
+                    branchId,
+                });
+            }
+
             setSelectedMemberId("");
             setIsMemberFormOpen(false);
 
@@ -919,6 +941,21 @@ export default function TrainerDetailPage({
                             "error"
                         );
                         return;
+                    }
+
+
+                    const branchId = getActiveBranchId();
+
+                    if (branchId) {
+                        const memberName =
+                            members.find((member) => member.id === memberId)?.name ??
+                            "Member";
+
+                        await logActivity({
+                            action: "DELETE",
+                            description: `Menghapus hubungan member "${memberName}" dari trainer "${trainer?.name ?? "Trainer"}"`,
+                            branchId,
+                        });
                     }
 
                     await loadSessionMembers(trainerId);
@@ -1242,6 +1279,17 @@ export default function TrainerDetailPage({
                 return;
             }
 
+
+            const branchId = getActiveBranchId();
+
+            if (branchId) {
+                await logActivity({
+                    action: "CREATE",
+                    description: `Menambahkan paket PT ${packageName.trim()} untuk trainer: ${trainer?.name ?? "Trainer"}`,
+                    branchId,
+                });
+            }
+
             setPackageName("");
             setPackageSessionCount("");
             setPackagePrice("");
@@ -1328,6 +1376,35 @@ export default function TrainerDetailPage({
 
         const supabase = createClient();
 
+        const currentPackage = packages.find(
+            (item) => item.id === editingPackageId
+        );
+
+        const changes: string[] = [];
+
+        if (currentPackage) {
+            if (currentPackage.name !== packageName.trim()) {
+                changes.push(
+                    `Nama: "${currentPackage.name}" → "${packageName.trim()}"`
+                );
+            }
+
+            if (
+                Number(currentPackage.session_count) !==
+                Number(packageSessionCount)
+            ) {
+                changes.push(
+                    `Jumlah sesi: ${currentPackage.session_count} → ${Number(packageSessionCount)}`
+                );
+            }
+
+            if (Number(currentPackage.price) !== Number(packagePrice)) {
+                changes.push(
+                    `Harga: ${currentPackage.price} → ${Number(packagePrice)}`
+                );
+            }
+        }
+
         const { error } = await supabase
             .from("trainer_packages")
             .update({
@@ -1354,6 +1431,18 @@ export default function TrainerDetailPage({
             return;
         }
 
+        const branchId = getActiveBranchId();
+
+        if (branchId) {
+            if (changes.length > 0) {
+                await logActivity({
+                    action: "UPDATE",
+                    description: `Mengubah paket PT "${packageName.trim()}" (trainer: ${trainer?.name ?? "Trainer"}): ${changes.join("; ")}`,
+                    branchId,
+                });
+            }
+        }
+
         const { id } = await params;
 
         await loadPackages(id);
@@ -1372,6 +1461,7 @@ export default function TrainerDetailPage({
             type: "success",
         });
     }
+
 
     /* =========================
         NONAKTIFKAN PAKET
@@ -1404,6 +1494,22 @@ export default function TrainerDetailPage({
                             "error"
                         );
                         return;
+                    }
+
+                    // Catat aktivitas setelah paket berhasil dinonaktifkan
+                    const branchId = getActiveBranchId();
+
+                    if (branchId) {
+                        const packageNameForLog =
+                            packages.find(
+                                (item) => item.id === packageId
+                            )?.name ?? "Paket PT";
+
+                        await logActivity({
+                            action: "DEACTIVATE",
+                            description: `Menonaktifkan paket PT ${packageNameForLog} (trainer: ${trainer?.name ?? "Trainer"})`,
+                            branchId,
+                        });
                     }
 
                     const { id } = await params;
@@ -1488,15 +1594,37 @@ export default function TrainerDetailPage({
             askConfirmation(
                 "Hapus Paket?",
                 `Yakin ingin menghapus paket "${selectedPackage.name}" secara permanen? Tindakan ini tidak dapat dibatalkan.`,
+
                 async () => {
                     try {
-                        const { error } = await supabase
+                        const { data: deletedPackage, error } = await supabase
                             .from("trainer_packages")
                             .delete()
                             .eq("id", packageId)
-                            .eq("status", "inactive");
+                            .eq("status", "inactive")
+                            .select("id");
 
                         if (error) throw error;
+
+                        if (!deletedPackage || deletedPackage.length === 0) {
+                            showFeedback(
+                                "Gagal Menghapus Paket",
+                                "Paket tidak ditemukan atau tidak dapat dihapus.",
+                                "error"
+                            );
+                            return;
+                        }
+
+                        // Catat aktivitas setelah penghapusan berhasil
+                        const branchId = getActiveBranchId();
+
+                        if (branchId) {
+                            await logActivity({
+                                action: "DELETE",
+                                description: `Menghapus paket PT ${selectedPackage.name} (trainer: ${trainer?.name ?? "Trainer"})`,
+                                branchId,
+                            });
+                        }
 
                         const { id } = await params;
                         await loadPackages(id);
@@ -1534,6 +1662,7 @@ export default function TrainerDetailPage({
         }
     }
 
+
     /* =========================
         AKTIFKAN PAKET
     ========================= */
@@ -1565,6 +1694,22 @@ export default function TrainerDetailPage({
                             "error"
                         );
                         return;
+                    }
+
+                    // Catat aktivitas setelah paket berhasil diaktifkan
+                    const branchId = getActiveBranchId();
+
+                    if (branchId) {
+                        const packageNameForLog =
+                            packages.find(
+                                (item) => item.id === packageId
+                            )?.name ?? "Paket PT";
+
+                        await logActivity({
+                            action: "ACTIVATE",
+                            description: `Mengaktifkan paket PT ${packageNameForLog} (trainer: ${trainer?.name ?? "Trainer"})`,
+                            branchId,
+                        });
                     }
 
                     const { id } = await params;
@@ -1618,6 +1763,32 @@ export default function TrainerDetailPage({
                 return;
             }
 
+            const changes: string[] = [];
+
+            if (trainer.name !== name.trim()) {
+                changes.push(`Nama: "${trainer.name}" → "${name.trim()}"`);
+            }
+
+            if ((trainer.phone ?? "") !== phone.trim()) {
+                changes.push(
+                    `No. HP: "${trainer.phone ?? "-"}" → "${phone.trim() || "-"}"`
+                );
+            }
+
+            if ((trainer.specialization ?? "") !== specialization.trim()) {
+                changes.push(
+                    `Spesialisasi: "${trainer.specialization ?? "-"}" → "${specialization.trim() || "-"}"`
+                );
+            }
+
+            if (
+                Number(trainer.price_per_session) !== Number(pricePerSession)
+            ) {
+                changes.push(
+                    `Harga per sesi: ${trainer.price_per_session} → ${Number(pricePerSession)}`
+                );
+            }
+
             const { error } = await supabase
                 .from("trainers")
                 .update({
@@ -1641,6 +1812,14 @@ export default function TrainerDetailPage({
                     "error"
                 );
                 return;
+            }
+
+            if (changes.length > 0) {
+                await logActivity({
+                    action: "UPDATE",
+                    description: `Mengubah data trainer "${name.trim()}": ${changes.join("; ")}`,
+                    branchId,
+                });
             }
 
             setTrainer({
@@ -1674,8 +1853,8 @@ export default function TrainerDetailPage({
         }
     }
     /* =========================
-   NONAKTIFKAN TRAINER
-========================= */
+        NONAKTIFKAN TRAINER
+    ========================= */
 
     async function deactivateTrainer() {
         if (!trainer) return;
@@ -1718,6 +1897,12 @@ export default function TrainerDetailPage({
                         );
                         return;
                     }
+
+                    await logActivity({
+                        action: "DEACTIVATE",
+                        description: `Menonaktifkan trainer: ${trainer.name}`,
+                        branchId,
+                    });
 
                     setTrainer({
                         ...trainer,
@@ -1790,6 +1975,12 @@ export default function TrainerDetailPage({
                         );
                         return;
                     }
+
+                    await logActivity({
+                        action: "ACTIVATE",
+                        description: `Mengaktifkan trainer: ${trainer.name}`,
+                        branchId,
+                    });
 
                     setTrainer({
                         ...trainer,
@@ -1909,6 +2100,26 @@ export default function TrainerDetailPage({
                 return;
             }
 
+            const branchId = getActiveBranchId();
+
+            if (branchId) {
+                const memberOrVisitorName =
+                    sessionType === "package"
+                        ? packageMembers.find(
+                            (item) => item.id === sessionPackageMemberId
+                        )?.member_name ?? "Member"
+                        : sessionVisitorName.trim();
+
+                await logActivity({
+                    action: "CREATE",
+                    description:
+                        sessionType === "package"
+                            ? `Mencatat sesi PT paket untuk ${memberOrVisitorName} (trainer: ${trainer?.name ?? "Trainer"}) pada ${sessionDate}`
+                            : `Mencatat sesi PT satuan untuk ${memberOrVisitorName} (trainer: ${trainer?.name ?? "Trainer"}) pada ${sessionDate}`,
+                    branchId,
+                });
+            }
+
             await loadPackageMembers(id);
             await loadSessions(id);
             await loadSessionMembers(id);
@@ -1994,6 +2205,30 @@ export default function TrainerDetailPage({
                 return;
             }
 
+            const branchId = getActiveBranchId();
+
+            if (branchId) {
+                const selectedMemberName =
+                    members.find(
+                        (member) => member.id === purchaseMemberId
+                    )?.name ??
+                    availableMembers.find(
+                        (member) => member.id === purchaseMemberId
+                    )?.name ??
+                    "Member";
+
+                const selectedPackageName =
+                    packages.find(
+                        (item) => item.id === purchasePackageId
+                    )?.name ?? "Paket PT";
+
+                await logActivity({
+                    action: "CREATE",
+                    description: `Pembelian paket PT "${selectedPackageName}" oleh member "${selectedMemberName}" dengan trainer "${trainer?.name ?? "Trainer"}"`,
+                    branchId,
+                });
+            }
+
             const { id } = await params;
 
             await loadPackageMembers(id);
@@ -2061,6 +2296,20 @@ export default function TrainerDetailPage({
                             "error"
                         );
                         return;
+                    }
+
+                    const branchId = getActiveBranchId();
+
+                    if (branchId) {
+                        const packageMember = packageMembers.find(
+                            (item) => item.id === packageMemberId
+                        );
+
+                        await logActivity({
+                            action: "UPDATE",
+                            description: `Membatalkan paket PT "${packageMember?.package_name ?? "Paket PT"}" milik member "${packageMember?.member_name ?? "Member"}" dengan trainer "${trainer?.name ?? "Trainer"}"`,
+                            branchId,
+                        });
                     }
 
                     if (trainer) {

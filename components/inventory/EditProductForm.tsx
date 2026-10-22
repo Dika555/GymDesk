@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import { logActivity } from "@/lib/activity-log";
 
 type EditProductFormProps = {
   productId: string;
@@ -79,6 +80,66 @@ export default function EditProductForm({
         return;
       }
 
+      if (
+        !Number.isFinite(Number(price)) ||
+        price.trim() === "" ||
+        Number(price) < 0
+      ) {
+        onError("Harga harus berupa angka nol atau lebih.");
+        return;
+      }
+
+      if (
+        !Number.isInteger(Number(minStock)) ||
+        minStock.trim() === "" ||
+        Number(minStock) < 0
+      ) {
+        onError("Minimum stok harus berupa bilangan bulat nol atau lebih.");
+        return;
+      }
+
+      const changes: string[] = [];
+
+      const { data: oldProduct, error: fetchError } = await supabase
+        .from("products")
+        .select("name, category, price, min_stock, status")
+        .eq("id", productId)
+        .eq("branch_id", branchId)
+        .maybeSingle();
+
+      if (fetchError || !oldProduct) {
+        onError("Data produk gagal diperiksa. Silakan coba lagi.");
+        return;
+      }
+
+      if (oldProduct.name !== name.trim()) {
+        changes.push(`Nama: "${oldProduct.name}" → "${name.trim()}"`);
+      }
+
+      if ((oldProduct.category ?? "") !== category.trim()) {
+        changes.push(
+          `Kategori: "${oldProduct.category ?? "-"}" → "${category.trim() || "-"}"`
+        );
+      }
+
+      if (Number(oldProduct.price) !== Number(price)) {
+        changes.push(
+          `Harga: Rp ${Number(oldProduct.price).toLocaleString("id-ID")} → Rp ${Number(price).toLocaleString("id-ID")}`
+        );
+      }
+
+      if (Number(oldProduct.min_stock) !== Number(minStock)) {
+        changes.push(
+          `Minimal stok: ${oldProduct.min_stock} → ${Number(minStock)} unit`
+        );
+      }
+
+      if (oldProduct.status !== status) {
+        changes.push(
+          `Status: ${oldProduct.status === "active" ? "Aktif" : "Nonaktif"} → ${status === "active" ? "Aktif" : "Nonaktif"}`
+        );
+      }
+
       const { error } = await supabase
         .from("products")
         .update({
@@ -95,6 +156,14 @@ export default function EditProductForm({
         console.error("Gagal mengubah produk:", error);
         onError("Gagal mengubah produk. Silakan coba lagi.");
         return;
+      }
+
+      if (changes.length > 0) {
+        await logActivity({
+          action: "UPDATE",
+          description: `Mengubah produk "${name.trim()}": ${changes.join("; ")}`,
+          branchId,
+        });
       }
 
       onSuccess();

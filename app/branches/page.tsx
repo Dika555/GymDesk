@@ -7,6 +7,7 @@ import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
 import Modal from "@/components/ui/Modal";
+import { logActivity } from "@/lib/activity-log";
 import {
   Building2,
   Pencil,
@@ -188,6 +189,45 @@ export default function BranchesPage() {
 
     try {
       if (editingId) {
+
+        const { data: oldBranch, error: fetchError } = await supabase
+          .from("branches")
+          .select("name, address, phone")
+          .eq("id", editingId)
+          .single();
+
+        if (fetchError || !oldBranch) {
+          showFeedback(
+            "Gagal Memuat Data Cabang",
+            "Data cabang sebelumnya tidak berhasil diperoleh.",
+            "error"
+          );
+          return;
+        }
+
+        const changes: string[] = [];
+
+        const newAddress = address.trim() || null;
+        const newPhone = phone.trim() || null;
+
+        if (oldBranch.name !== trimmedName) {
+          changes.push(
+            `Nama: "${oldBranch.name}" → "${trimmedName}"`
+          );
+        }
+
+        if (oldBranch.address !== newAddress) {
+          changes.push(
+            `Alamat: "${oldBranch.address ?? "-"}" → "${newAddress ?? "-"}"`
+          );
+        }
+
+        if (oldBranch.phone !== newPhone) {
+          changes.push(
+            `Telepon: "${oldBranch.phone ?? "-"}" → "${newPhone ?? "-"}"`
+          );
+        }
+
         const { error } = await supabase
           .from("branches")
           .update({
@@ -207,6 +247,14 @@ export default function BranchesPage() {
           return;
         }
 
+        if (changes.length > 0) {
+          await logActivity({
+            action: "UPDATE",
+            description: `Memperbarui cabang "${trimmedName}": ${changes.join("; ")}`,
+            branchId: editingId,
+          });
+        }
+
         resetFormAfterSave();
 
         showFeedback(
@@ -215,13 +263,15 @@ export default function BranchesPage() {
           "success"
         );
       } else {
-        const { error } = await supabase
+        const { data: newBranch, error } = await supabase
           .from("branches")
           .insert({
             name: trimmedName,
             address: address.trim() || null,
             phone: phone.trim() || null,
-          });
+          })
+          .select("id")
+          .single();
 
         if (error) {
           console.error("Gagal menambahkan cabang:", error);
@@ -231,6 +281,14 @@ export default function BranchesPage() {
             "error"
           );
           return;
+        }
+
+        if (newBranch) {
+          await logActivity({
+            action: "CREATE",
+            description: `Menambahkan cabang "${trimmedName}".`,
+            branchId: newBranch.id,
+          });
         }
 
         resetFormAfterSave();
@@ -283,12 +341,18 @@ export default function BranchesPage() {
         return;
       }
 
+      await logActivity({
+        action: newStatus ? "ACTIVATE" : "DEACTIVATE",
+        description: `Cabang "${branch.name}" berhasil ${newStatus ? "diaktifkan" : "dinonaktifkan"
+          }.`,
+        branchId: branch.id,
+      });
+
       setConfirmBranch(null);
 
       showFeedback(
         newStatus ? "Cabang Berhasil Diaktifkan" : "Cabang Berhasil Dinonaktifkan",
-        `Cabang "${branch.name}" berhasil ${
-          newStatus ? "diaktifkan" : "dinonaktifkan"
+        `Cabang "${branch.name}" berhasil ${newStatus ? "diaktifkan" : "dinonaktifkan"
         }.`,
         "success"
       );
@@ -484,11 +548,10 @@ export default function BranchesPage() {
 
                           <td className="px-4 py-4">
                             <span
-                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${
-                                branch.is_active
-                                  ? "bg-green-50 text-green-700 ring-green-200"
-                                  : "bg-red-50 text-red-700 ring-red-200"
-                              }`}
+                              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ring-1 ${branch.is_active
+                                ? "bg-green-50 text-green-700 ring-green-200"
+                                : "bg-red-50 text-red-700 ring-red-200"
+                                }`}
                             >
                               {branch.is_active ? "Aktif" : "Nonaktif"}
                             </span>
@@ -509,11 +572,10 @@ export default function BranchesPage() {
                                 type="button"
                                 onClick={() => setConfirmBranch(branch)}
                                 disabled={changingStatus}
-                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${
-                                  branch.is_active
-                                    ? "border-red-200 text-red-600 hover:bg-red-50"
-                                    : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
-                                }`}
+                                className={`inline-flex items-center justify-center gap-1.5 rounded-xl border bg-white px-3 py-2 text-sm font-medium transition-colors disabled:opacity-50 ${branch.is_active
+                                  ? "border-red-200 text-red-600 hover:bg-red-50"
+                                  : "border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                  }`}
                               >
                                 {branch.is_active ? (
                                   <PowerOff size={14} />
@@ -572,11 +634,10 @@ export default function BranchesPage() {
                 type="button"
                 onClick={() => void handleToggleStatus()}
                 disabled={changingStatus}
-                className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${
-                  confirmBranch.is_active
-                    ? "bg-red-600 hover:bg-red-700"
-                    : "bg-emerald-600 hover:bg-emerald-700"
-                }`}
+                className={`flex-1 rounded-lg px-4 py-2 font-semibold text-white disabled:opacity-50 ${confirmBranch.is_active
+                  ? "bg-red-600 hover:bg-red-700"
+                  : "bg-emerald-600 hover:bg-emerald-700"
+                  }`}
               >
                 {changingStatus
                   ? "Memproses..."

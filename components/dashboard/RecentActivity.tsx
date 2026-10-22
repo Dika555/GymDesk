@@ -59,13 +59,29 @@ export default function RecentActivity({ activities }: Props) {
     }
   }
 
+  function getActivityLabel(type: Activity["type"]) {
+    switch (type) {
+      case "member":
+        return "Member Baru";
+      case "membership":
+        return "Membership";
+      case "visit":
+        return "Kunjungan";
+      case "transaction":
+        return "Transaksi";
+      case "trainer":
+        return "Sesi Trainer";
+      case "inventory":
+        return "Perubahan Stok";
+    }
+  }
+
   return (
     <div className="mt-6 min-w-0 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm sm:p-6">
       <div className="mb-5">
         <h2 className="text-lg font-semibold text-zinc-900">
           Aktivitas Terbaru
         </h2>
-
         <p className="mt-1 text-sm text-zinc-600">
           Daftar aktivitas terbaru yang terjadi di GymDesk.
         </p>
@@ -76,7 +92,7 @@ export default function RecentActivity({ activities }: Props) {
           Belum ada aktivitas.
         </p>
       ) : (
-        <div className="w-full min-w-0 overflow-x-auto rounded-xl border border-zinc-200">
+        <div className="activity-table-scroll w-full min-w-0 overflow-x-auto rounded-xl border border-zinc-200">
           <div className="max-h-60 min-w-[650px] overflow-y-auto">
             <table className="w-full table-fixed">
               <colgroup>
@@ -126,19 +142,23 @@ export default function RecentActivity({ activities }: Props) {
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 text-orange-500">
                           {getActivityIcon(activity.type)}
                         </div>
-
                         <span className="break-words text-sm font-medium text-zinc-900">
-                          {activity.detail}
+                          {getActivityLabel(activity.type)}
                         </span>
                       </div>
                     </td>
 
                     <td className="break-words px-4 py-3 text-sm text-zinc-700">
                       {activity.name}
+                      {activity.detail && (
+                        <p className="mt-1 text-xs text-zinc-500">
+                          {activity.detail}
+                        </p>
+                      )}
                     </td>
 
-                    <td className="break-words px-4 py-3 text-left text-sm font-medium text-zinc-900">
-                      {activity.value}
+                    <td className="break-words px-4 py-3 text-left text-sm text-zinc-700">
+                      {activity.value || "-"}
                     </td>
                   </tr>
                 ))}

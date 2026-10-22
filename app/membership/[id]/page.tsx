@@ -8,7 +8,7 @@ import EditMembershipModal from "@/components/memberships/[id]/EditMembershipMod
 import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
-
+import { logActivity } from "@/lib/activity-log";
 import {
     ArrowLeft,
     ArrowUpRight,
@@ -158,6 +158,29 @@ export default function MembershipDetailPage() {
                 .map((item) => item.trim())
                 .filter(Boolean);
 
+            const changes: string[] = [];
+
+            if (plan.name !== editName.trim()) {
+                changes.push(`Nama: "${plan.name}" → "${editName.trim()}"`);
+            }
+
+            if (plan.duration !== duration) {
+                changes.push(`Durasi: ${plan.duration} hari → ${duration} hari`);
+            }
+
+            if (Number(plan.price) !== price) {
+                changes.push(`Harga: ${plan.price} → ${price}`);
+            }
+
+            const oldBenefits = (plan.benefits ?? []).join(", ");
+            const newBenefits = benefits.join(", ");
+
+            if (oldBenefits !== newBenefits) {
+                changes.push(
+                    `Manfaat: "${oldBenefits || "-"}" → "${newBenefits || "-"}"`
+                );
+            }
+
             const { data, error } = await supabase
                 .from("membership_plans")
                 .update({
@@ -202,6 +225,14 @@ export default function MembershipDetailPage() {
                     }
                     : prev
             );
+
+            if (changes.length > 0) {
+                await logActivity({
+                    action: "UPDATE",
+                    description: `Mengubah paket membership "${data.name}": ${changes.join("; ")}`,
+                    branchId,
+                });
+            }
 
             setIsEditFormOpen(false);
 
@@ -271,6 +302,14 @@ export default function MembershipDetailPage() {
             setPlan((prev) =>
                 prev ? { ...prev, is_active: newStatus } : prev
             );
+
+            await logActivity({
+                action: newStatus ? "ACTIVATE" : "DEACTIVATE",
+                description: newStatus
+                    ? `Mengaktifkan paket membership: ${data.name}`
+                    : `Menonaktifkan paket membership: ${data.name}`,
+                branchId,
+            });
 
             showFeedback(
                 "Status Berhasil Diubah",
@@ -391,6 +430,12 @@ export default function MembershipDetailPage() {
                 );
                 return;
             }
+
+            await logActivity({
+                action: "DELETE",
+                description: `Menghapus paket membership: ${plan.name}`,
+                branchId,
+            });
 
             setIsDeleteConfirmOpen(false);
             router.push("/membership?deleted=success");

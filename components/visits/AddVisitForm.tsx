@@ -5,6 +5,7 @@ import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import Select from "react-select";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 
 type Member = {
   id: string;
@@ -208,6 +209,23 @@ export default function AddVisitForm({ onSuccess }: Props) {
         );
         return;
       }
+
+      console.log("1. Mulai mencatat log kunjungan", {
+        branchId,
+        visitType,
+      });
+
+      await logActivity({
+        action: "CREATE",
+        description:
+          visitType === "member"
+            ? `Mencatat kunjungan member: ${members.find((member) => member.id === memberId)?.name ?? "Member"
+            }`
+            : `Mencatat kunjungan non-member: ${visitorName.trim()}`,
+        branchId,
+      });
+
+      console.log("2. Fungsi logActivity selesai");
 
       setMemberId("");
       setVisitorName("");

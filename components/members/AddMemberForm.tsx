@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
+import { logActivity } from "@/lib/activity-log";
 
 type Member = {
   id: string;
@@ -117,6 +118,28 @@ export default function AddMemberForm({
           return;
         }
 
+        const changes: string[] = [];
+
+        if (member.name !== name.trim()) {
+          changes.push(`Nama: "${member.name}" → "${name.trim()}"`);
+        }
+
+        if ((member.phone ?? "") !== cleanPhone) {
+          changes.push(`No. HP: "${member.phone ?? "-"}" → "${cleanPhone}"`);
+        }
+
+        if ((member.email ?? "") !== (email.trim() || "")) {
+          changes.push(`Email: "${member.email ?? "-"}" → "${email.trim() || "-"}"`);
+        }
+
+        if ((member.gender ?? "") !== (gender || "")) {
+          changes.push(`Jenis kelamin: "${member.gender ?? "-"}" → "${gender || "-"}"`);
+        }
+
+        if ((member.address ?? "") !== (address.trim() || "")) {
+          changes.push(`Alamat: "${member.address ?? "-"}" → "${address.trim() || "-"}"`);
+        }
+
         const { error } = await supabase
           .from("members")
           .update({
@@ -139,6 +162,14 @@ export default function AddMemberForm({
             duplicate ? "warning" : "error"
           );
           return;
+        }
+
+        if (changes.length > 0) {
+          await logActivity({
+            action: "UPDATE",
+            description: `Mengubah data member "${name.trim()}": ${changes.join("; ")}`,
+            branchId,
+          });
         }
 
         onSuccess();
@@ -171,6 +202,14 @@ export default function AddMemberForm({
         );
         return;
       }
+
+      await logActivity({
+        action: "CREATE",
+        description: `Menambahkan member: ${name.trim()}`,
+        branchId,
+      });
+
+      onSuccess();
 
       onSuccess();
     } catch (error) {

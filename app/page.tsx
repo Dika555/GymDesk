@@ -1,13 +1,13 @@
+
 import { cookies } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
-import VisitChart from "@/components/dashboard/VisitChart";
+import VisitChart from "@/components/inventory/VisitChart";
 import RecentActivity from "@/components/dashboard/RecentActivity";
 import ExpiringMemberships from "@/components/dashboard/ExpiringMemberships";
 import StatCard from "@/components/dashboard/StatCard";
 import {
   LayoutDashboard,
   Users,
-  UserCheck,
   Footprints,
   Receipt,
 } from "lucide-react";
@@ -15,8 +15,99 @@ import {
 export default async function DashboardPage() {
   const supabase = await createClient();
 
+  // 1. Ambil identitas pengguna dari sesi Supabase.
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+
+  if (authError || !user) {
+    return (
+      <main className="p-8 text-zinc-900">
+        <h1 className="text-xl font-bold">
+          Sesi tidak valid
+        </h1>
+        <p className="mt-2 text-sm text-zinc-500">
+          Silakan login kembali.
+        </p>
+      </main>
+    );
+  }
+
+  // 2. Ambil role dan cabang resmi dari database.
+  const { data: profile, error: profileError } =
+    await supabase
+      .from("users")
+      .select("role, branch_id, is_active")
+      .eq("id", user.id)
+      .single();
+
+  if (
+    profileError ||
+    !profile ||
+    !profile.is_active ||
+    !["admin", "super_admin"].includes(profile.role)
+  ) {
+    return (
+      <main className="p-8 text-zinc-900">
+        <h1 className="text-xl font-bold">
+          Akses ditolak
+        </h1>
+        <p className="mt-2 text-sm text-zinc-500">
+          Akun tidak aktif atau tidak memiliki akses dashboard.
+        </p>
+      </main>
+    );
+  }
+
+  // 3. Tentukan cabang berdasarkan role.
   const cookieStore = await cookies();
-  const branchId = cookieStore.get("activeBranchId")?.value;
+  const savedBranchId =
+    cookieStore.get("activeBranchId")?.value;
+
+  let branchId: string | null = null;
+
+  if (profile.role === "admin") {
+    // Admin selalu menggunakan cabang dari database.
+    branchId = profile.branch_id;
+  } else {
+    // Super Admin boleh memilih cabang aktif.
+    const { data: branches, error: branchError } =
+      await supabase
+        .from("branches")
+        .select("id")
+        .eq("is_active", true)
+        .order("name");
+
+    if (branchError) {
+      console.error(
+        "Gagal memuat cabang:",
+        branchError.message
+      );
+    } else {
+      const branchList = branches ?? [];
+
+      branchId =
+        branchList.find(
+          (branch) => branch.id === savedBranchId
+        )?.id ??
+        branchList[0]?.id ??
+        null;
+    }
+  }
+
+  if (!branchId) {
+    return (
+      <main className="p-8 text-zinc-900">
+        <h1 className="text-xl font-bold">
+          Cabang belum tersedia
+        </h1>
+        <p className="mt-2 text-sm text-zinc-500">
+          Pastikan akun memiliki cabang yang aktif.
+        </p>
+      </main>
+    );
+  }
 
   const now = new Date();
 
@@ -31,17 +122,15 @@ export default async function DashboardPage() {
     expiringDate.getDate() + EXPIRING_DAYS
   );
 
-  const expiringDateLimit = expiringDate.toLocaleDateString(
-    "en-CA",
-    {
+  const expiringDateLimit =
+    expiringDate.toLocaleDateString("en-CA", {
       timeZone: "Asia/Jakarta",
-    }
-  );
+    });
 
   const startOfYear = `${now.getFullYear()}-01-01`;
 
   // =========================
-  // DATA UNTUK GRAFIK KUNJUNGAN
+  // DATA DASHBOARD
   // =========================
 
   const [
@@ -53,7 +142,7 @@ export default async function DashboardPage() {
     { data: recentTrainerSessions },
     { data: recentStockMovements },
   ] = await Promise.all([
-    // Data grafik kunjungan
+    // Data grafik kunjungan.
     supabase
       .from("visits")
       .select("visit_date")
@@ -61,7 +150,7 @@ export default async function DashboardPage() {
       .gte("visit_date", startOfYear)
       .lte("visit_date", today),
 
-    // Member terbaru
+    // Member terbaru.
     supabase
       .from("members")
       .select("id, name, created_at")
@@ -69,334 +158,231 @@ export default async function DashboardPage() {
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Kunjungan terbaru
+    // Kunjungan terbaru.
     supabase
       .from("visits")
       .select(`
-      id,
-      member_id,
-      visitor_name,
-      visit_date,
-      visit_fee,
-      payment_method,
-      created_at,
-      members (name)
-    `)
+        id,
+        member_id,
+        visitor_name,
+        visit_date,
+        visit_fee,
+        payment_method,
+        created_at,
+        members (name)
+      `)
       .eq("branch_id", branchId)
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Membership terbaru
+    // Membership terbaru.
     supabase
       .from("memberships")
       .select(`
-      id,
-      member_id,
-      created_at,
-      members (name),
-      membership_plans (name)
-    `)
+        id,
+        member_id,
+        created_at,
+        members (name),
+        membership_plans (name)
+      `)
       .eq("branch_id", branchId)
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Transaksi terbaru
+    // Transaksi terbaru.
     supabase
       .from("transactions")
       .select(`
-      id,
-      member_id,
-      transaction_type,
-      total_amount,
-      transaction_date,
-      created_at,
-      status,
-      customer_name,
-      notes,
-      members (name)
-    `)
+        id,
+        member_id,
+        transaction_type,
+        total_amount,
+        transaction_date,
+        created_at,
+        status,
+        customer_name,
+        notes,
+        members (name)
+      `)
       .eq("branch_id", branchId)
       .order("created_at", { ascending: false })
       .limit(50),
 
-    // Sesi trainer terbaru
+    // Sesi trainer terbaru.
     supabase
       .from("trainer_sessions")
       .select(`
-      id,
-      member_id,
-      visitor_name,
-      session_date,
-      price,
-      created_at,
-      transaction_id,
-      members (name)
-    `)
+        id,
+        member_id,
+        visitor_name,
+        session_date,
+        price,
+        created_at,
+        transaction_id,
+        members (name),
+        trainers!inner (branch_id)
+      `)
+      .eq("trainers.branch_id", branchId)
       .order("created_at", { ascending: false })
       .limit(10),
 
-    // Perubahan stok terbaru
+    // Perubahan stok terbaru.
     supabase
       .from("stock_movements")
       .select(`
-      id,
-      product_id,
-      type,
-      quantity,
-      description,
-      created_at,
-      products (name)
-    `)
+        id,
+        product_id,
+        type,
+        quantity,
+        description,
+        created_at,
+        products (name)
+      `)
       .eq("branch_id", branchId)
       .order("created_at", { ascending: false })
       .limit(10),
   ]);
 
-  // Transaksi pendaftaran member baru
-  const registrationTransactions = (
-    recentTransactions ?? []
-  ).filter(
-    (transaction) =>
-      transaction.transaction_type === "registration"
-  );
-
   // =========================
-  // TIPE DATA AKTIVITAS
+  // AKTIVITAS UTAMA GYMDESK
+  // Tidak mengambil activity_logs.
   // =========================
 
   type DashboardActivity = {
     id: string;
     type:
-    | "member"
-    | "membership"
-    | "visit"
-    | "transaction"
-    | "trainer"
-    | "inventory";
+      | "member"
+      | "membership"
+      | "visit"
+      | "transaction"
+      | "trainer"
+      | "inventory";
     created_at: string;
     name: string;
     detail: string;
     value: string;
   };
 
-  // =========================
-  // AKTIVITAS MEMBER BARU
-  // =========================
+  const activities: DashboardActivity[] = [
+    // Member baru.
+    ...(recentMembers ?? []).map((item) => ({
+      id: `member-${item.id}`,
+      type: "member" as const,
+      created_at: item.created_at,
+      name: item.name,
+      detail: "Member baru ditambahkan",
+      value: "-",
+    })),
 
-  const memberActivities: DashboardActivity[] =
-    (recentMembers ?? []).map((member) => {
-      const registration = registrationTransactions.find(
-        (transaction) =>
-          transaction.member_id === member.id
-      );
-
-      return {
-        id: `member-${member.id}`,
-        type: "member",
-        created_at: member.created_at,
-        name: member.name,
-        detail: "Member baru",
-        value: registration
-          ? `Rp ${registration.total_amount.toLocaleString(
-            "id-ID"
-          )}`
-          : "—",
-      };
-    });
-
-  // =========================
-  // AKTIVITAS KUNJUNGAN
-  // =========================
-
-  const visitActivities: DashboardActivity[] =
-    (recentVisits ?? []).map((visit) => {
-      const member = Array.isArray(visit.members)
-        ? visit.members[0] ?? null
-        : visit.members ?? null;
+    // Kunjungan gym.
+    ...(recentVisits ?? []).map((item) => {
+      const member = Array.isArray(item.members)
+        ? item.members[0] ?? null
+        : item.members ?? null;
 
       return {
-        id: `visit-${visit.id}`,
-        type: "visit",
-        created_at: visit.created_at,
+        id: `visit-${item.id}`,
+        type: "visit" as const,
+        created_at: item.created_at,
         name:
           member?.name ??
-          visit.visitor_name ??
+          item.visitor_name ??
           "Pengunjung",
-        detail: member
-          ? "Kunjungan Member"
-          : "Kunjungan Non-member",
-        value:
-          visit.visit_fee > 0
-            ? `Rp ${visit.visit_fee.toLocaleString(
-              "id-ID"
-            )}`
-            : "Rp 0",
+        detail: "Kunjungan gym",
+        value: `Rp${Number(
+          item.visit_fee ?? 0
+        ).toLocaleString("id-ID")}`,
       };
-    });
+    }),
 
-  // =========================
-  // AKTIVITAS TRANSAKSI
-  // =========================
+    // Membership baru.
+    ...(recentMemberships ?? []).map((item) => {
+      const member = Array.isArray(item.members)
+        ? item.members[0] ?? null
+        : item.members ?? null;
 
-  const transactionActivities: DashboardActivity[] =
-    (recentTransactions ?? [])
-      .filter((transaction) => {
-        if (transaction.transaction_type === "registration") {
-          return false;
-        }
-
-        const customerName =
-          transaction.customer_name?.trim().toLowerCase() ?? "";
-
-        const notes =
-          transaction.notes?.toLowerCase() ?? "";
-
-        // Kecualikan transaksi yang jelas merupakan biaya kunjungan.
-        const isVisitTransaction =
-          notes.includes("biaya kunjungan non-member") ||
-          notes.includes("tanggal kunjungan:");
-
-        if (isVisitTransaction) {
-          return false;
-        }
-
-        return true;
-      })
-      .map((transaction) => {
-        const member = Array.isArray(transaction.members)
-          ? transaction.members[0] ?? null
-          : transaction.members ?? null;
-
-        // Cari membership yang dibuat oleh member yang sama
-        // pada waktu yang sama dengan transaksi.
-        const membership = (
-          recentMemberships ?? []
-        ).find(
-          (membership) =>
-            membership.member_id === transaction.member_id &&
-            membership.created_at ===
-            transaction.transaction_date
-        );
-
-        const plan = membership
-          ? Array.isArray(
-            membership.membership_plans
-          )
-            ? membership.membership_plans[0] ?? null
-            : membership.membership_plans ?? null
-          : null;
-
-        let detail = "Transaksi Lainnya";
-
-        if (
-          transaction.transaction_type === "membership"
-        ) {
-          detail = `Pembayaran Membership${plan?.name ? ` • ${plan.name}` : ""
-            }`;
-        } else if (
-          transaction.transaction_type === "product"
-        ) {
-          detail = "Pembelian Produk";
-        } else if (
-          transaction.transaction_type === "trainer"
-        ) {
-          detail = transaction.notes?.trim()
-            ? transaction.notes
-            : "Pembelian Paket Trainer";
-        } else if (transaction.notes) {
-          detail = transaction.notes;
-        }
-
-        return {
-          id: `transaction-${transaction.id}`,
-          type: "transaction",
-          created_at: transaction.created_at,
-          name:
-            member?.name ??
-            transaction.customer_name ??
-            transaction.notes ??
-            "—",
-          detail,
-          value: `Rp ${transaction.total_amount.toLocaleString(
-            "id-ID"
-          )}`,
-        };
-      });
-
-  // =========================
-  // AKTIVITAS TRAINER
-  // =========================
-
-  const trainerActivities: DashboardActivity[] =
-    (recentTrainerSessions ?? [])
-      .filter((session) => {
-        // Sesi dengan transaksi terkait sudah ditampilkan
-        // melalui aktivitas transaksi.
-        return !session.transaction_id;
-      })
-      .map((session) => {
-        const member = Array.isArray(session.members)
-          ? session.members[0] ?? null
-          : session.members ?? null;
-
-        return {
-          id: `trainer-${session.id}`,
-          type: "trainer",
-          created_at: session.created_at,
-          name:
-            member?.name ??
-            session.visitor_name ??
-            "Pengunjung",
-          detail: member
-            ? "Sesi Trainer"
-            : "Sesi Trainer Non-member",
-          value: `Rp ${session.price.toLocaleString(
-            "id-ID"
-          )}`,
-        };
-      });
-
-  // =========================
-  // AKTIVITAS INVENTORY
-  // =========================
-
-  const inventoryActivities: DashboardActivity[] =
-    (recentStockMovements ?? []).map((movement) => {
-      const product = Array.isArray(movement.products)
-        ? movement.products[0] ?? null
-        : movement.products ?? null;
+      const plan = Array.isArray(
+        item.membership_plans
+      )
+        ? item.membership_plans[0] ?? null
+        : item.membership_plans ?? null;
 
       return {
-        id: `inventory-${movement.id}`,
-        type: "inventory",
-        created_at: movement.created_at,
-        name: product?.name ?? "Produk",
-        detail:
-          movement.type === "in"
-            ? "Stok Masuk"
-            : "Stok Keluar",
-        value:
-          movement.type === "in"
-            ? `+${movement.quantity}`
-            : `-${movement.quantity}`,
+        id: `membership-${item.id}`,
+        type: "membership" as const,
+        created_at: item.created_at,
+        name: member?.name ?? "Member",
+        detail: plan?.name ?? "Membership baru",
+        value: "-",
       };
-    });
+    }),
 
-  // =========================
-  // GABUNGKAN SEMUA AKTIVITAS
-  // =========================
+    // Transaksi.
+    ...(recentTransactions ?? []).map((item) => {
+      const member = Array.isArray(item.members)
+        ? item.members[0] ?? null
+        : item.members ?? null;
 
-  const activities = [
-    ...memberActivities,
-    ...visitActivities,
-    ...transactionActivities,
-    ...trainerActivities,
-    ...inventoryActivities,
-  ].sort(
-    (a, b) =>
-      new Date(b.created_at).getTime() -
-      new Date(a.created_at).getTime()
-  );
+      return {
+        id: `transaction-${item.id}`,
+        type: "transaction" as const,
+        created_at: item.created_at,
+        name:
+          item.customer_name ??
+          member?.name ??
+          "Pelanggan",
+        detail: item.notes ?? "Transaksi gym",
+        value: `Rp${Number(
+          item.total_amount ?? 0
+        ).toLocaleString("id-ID")}`,
+      };
+    }),
+
+    // Sesi personal trainer.
+    ...(recentTrainerSessions ?? []).map((item) => {
+      const member = Array.isArray(item.members)
+        ? item.members[0] ?? null
+        : item.members ?? null;
+
+      return {
+        id: `trainer-${item.id}`,
+        type: "trainer" as const,
+        created_at: item.created_at,
+        name:
+          member?.name ??
+          item.visitor_name ??
+          "Pengunjung",
+        detail: "Sesi personal trainer",
+        value: `Rp${Number(
+          item.price ?? 0
+        ).toLocaleString("id-ID")}`,
+      };
+    }),
+
+    // Perubahan stok.
+    ...(recentStockMovements ?? []).map((item) => {
+      const product = Array.isArray(item.products)
+        ? item.products[0] ?? null
+        : item.products ?? null;
+
+      return {
+        id: `stock-${item.id}`,
+        type: "inventory" as const,
+        created_at: item.created_at,
+        name: product?.name ?? "Produk",
+        detail: `${item.type}: ${
+          item.description ?? "Perubahan stok"
+        }`,
+        value: String(item.quantity ?? 0),
+      };
+    }),
+  ]
+    .sort(
+      (a, b) =>
+        new Date(b.created_at).getTime() -
+        new Date(a.created_at).getTime()
+    )
+    .slice(0, 10);
 
   // =========================
   // STATISTIK DASHBOARD
@@ -432,8 +418,14 @@ export default async function DashboardPage() {
       })
       .eq("branch_id", branchId)
       .eq("status", "completed")
-      .gte("transaction_date", `${today}T00:00:00`)
-      .lt("transaction_date", `${today}T23:59:59.999`),
+      .gte(
+        "transaction_date",
+        `${today}T00:00:00`
+      )
+      .lt(
+        "transaction_date",
+        `${today}T23:59:59.999`
+      ),
   ]);
 
   // =========================
@@ -446,12 +438,8 @@ export default async function DashboardPage() {
       .select(`
         id,
         end_date,
-        members (
-          name
-        ),
-        membership_plans (
-          name
-        )
+        members (name),
+        membership_plans (name)
       `)
       .eq("branch_id", branchId)
       .eq("status", "active")
@@ -463,10 +451,7 @@ export default async function DashboardPage() {
 
   return (
     <main className="min-h-screen bg-zinc-50 p-6 text-zinc-900 lg:p-8">
-      {/* =========================
-          HEADER DASHBOARD
-      ========================= */}
-
+      {/* HEADER DASHBOARD */}
       <div className="flex items-center gap-4">
         <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-orange-50 text-orange-600">
           <LayoutDashboard size={26} />
@@ -483,18 +468,12 @@ export default async function DashboardPage() {
         </div>
       </div>
 
-      {/* =========================
-          GRAFIK KUNJUNGAN
-      ========================= */}
-
+      {/* GRAFIK KUNJUNGAN */}
       <div className="mb-6 mt-6">
         <VisitChart visits={visits ?? []} />
       </div>
 
-      {/* =========================
-    STATISTIK
-========================= */}
-
+      {/* STATISTIK */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <StatCard
           title="Total Member"
@@ -518,28 +497,20 @@ export default async function DashboardPage() {
         />
       </div>
 
-      {/* =========================
-          AKTIVITAS TERBARU
-      ========================= */}
-
+      {/* AKTIVITAS TERBARU */}
       <RecentActivity activities={activities} />
 
-      {/* =========================
-          MEMBERSHIP AKAN BERAKHIR
-      ========================= */}
-
+      {/* MEMBERSHIP AKAN BERAKHIR */}
       <ExpiringMemberships
         memberships={(expiringMemberships ?? []).map(
           (membership) => ({
             id: membership.id,
             end_date: membership.end_date,
-
             members: Array.isArray(
               membership.members
             )
               ? membership.members[0] ?? null
               : membership.members ?? null,
-
             membership_plans: Array.isArray(
               membership.membership_plans
             )

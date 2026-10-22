@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import LoadingScreen from "@/components/ui/LoadingScreen";
+import { logActivity } from "@/lib/activity-log";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -68,6 +69,12 @@ export default function LoginPage() {
       setLoading(false);
       return;
     }
+
+    await logActivity({
+      action: "LOGIN",
+      description: `Pengguna "${userData.name}" berhasil login.`,
+      branchId: userData.branch_id,
+    });
 
     router.push("/");
   }

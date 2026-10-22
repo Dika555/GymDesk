@@ -7,6 +7,7 @@ import TrainerFormModal from "@/components/trainers/TrainerFormModal";
 import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 import {
   Dumbbell,
   Phone,
@@ -166,6 +167,12 @@ export default function TrainersPage() {
 
         return;
       }
+
+      await logActivity({
+        action: "CREATE",
+        description: `Menambahkan trainer: ${trainerName}`,
+        branchId,
+      });
 
       setIsOpen(false);
       setName("");

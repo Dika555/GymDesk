@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 
 type Props = {
   onSuccess: () => void;
@@ -145,6 +146,12 @@ export default function AddProductForm({ onSuccess }: Props) {
         );
         return;
       }
+
+      await logActivity({
+        action: "CREATE",
+        description: `Menambahkan produk "${name.trim()}" dengan stok awal ${Number(stock)} unit dan harga Rp ${Number(price).toLocaleString("id-ID")}`,
+        branchId,
+      });
 
       setName("");
       setCategory("");

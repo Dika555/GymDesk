@@ -5,6 +5,7 @@ import { Trash2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import Modal from "@/components/ui/Modal";
+import { logActivity } from "@/lib/activity-log";
 
 type DeleteProductButtonProps = {
   productId: string;
@@ -67,6 +68,12 @@ export default function DeleteProductButton({
 
         return;
       }
+
+      await logActivity({
+        action: "DELETE",
+        description: `Menghapus produk "${productName}" dari inventory.`,
+        branchId,
+      });
 
       onSuccess();
     } catch (error) {

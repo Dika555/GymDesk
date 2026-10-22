@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import Select from "react-select";
+import { logActivity } from "@/lib/activity-log";
 
 type Product = {
   id: string;
@@ -96,6 +97,23 @@ export default function AddStockForm({
         onError(error.message || "Gagal menambahkan stok.");
         return;
       }
+
+      const selectedProduct = products.find(
+        (product) => product.id === productId
+      );
+
+      const previousStock = selectedProduct?.stock;
+
+      const stockInfo =
+        previousStock !== undefined
+          ? `Stok sebelumnya ${previousStock} unit, stok setelah penambahan ${previousStock + amount} unit.`
+          : `Stok sebelumnya tidak diketahui, penambahan ${amount} unit.`;
+
+      await logActivity({
+        action: "UPDATE",
+        description: `Menambahkan stok produk "${selectedProduct?.name ?? "Produk"}" sebanyak ${amount} unit. ${stockInfo}${description.trim() ? ` Keterangan: ${description.trim()}` : ""}`,
+        branchId,
+      });
 
       setProductId("");
       setQuantity("");

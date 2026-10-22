@@ -7,6 +7,7 @@ import VisitsReport from "@/components/reports/VisitsReport";
 import TrainersReport from "@/components/reports/TrainersReport";
 import TransactionReport from "@/components/reports/TransactionReport";
 import ProductReport from "@/components/reports/ProductReport";
+import { logActivity } from "@/lib/activity-log";
 import {
   CalendarDays,
   Check,
@@ -316,9 +317,24 @@ export default function ReportsPage() {
     if (selectedReports.includes("products")) {
       await loadProductReport();
     }
+
+    const branchId = getActiveBranchId();
+
+    if (branchId) {
+      const selectedReportNames = reportOptions
+        .filter((report) => selectedReports.includes(report.id))
+        .map((report) => report.label)
+        .join(", ");
+
+      await logActivity({
+        action: "VIEW",
+        description: `Menampilkan laporan (${selectedReportNames}) untuk periode ${startDate} sampai ${endDate}.`,
+        branchId,
+      });
+    }
   }
 
-  function handleExportXlsx() {
+  async function handleExportXlsx() {
     if (!showReport) {
       setMessage("Tampilkan laporan terlebih dahulu sebelum export.");
       return;
@@ -480,6 +496,21 @@ export default function ReportsPage() {
       `Laporan_GymDesk_${startDate}_${endDate}.xlsx`;
 
     XLSX.writeFile(workbook, fileName);
+
+    const branchId = getActiveBranchId();
+
+    if (branchId) {
+      const selectedReportNames = reportOptions
+        .filter((report) => selectedReports.includes(report.id))
+        .map((report) => report.label)
+        .join(", ");
+
+      await logActivity({
+        action: "EXPORT",
+        description: `Mengekspor laporan (${selectedReportNames}) untuk periode ${startDate} sampai ${endDate}. Nama file: ${fileName}.`,
+        branchId,
+      });
+    }
 
     setMessage("Laporan berhasil diexport ke Excel.");
   }
@@ -1274,7 +1305,7 @@ export default function ReportsPage() {
               className="inline-flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 focus:outline-none focus:ring-2 focus:ring-zinc-300 focus:ring-offset-2"
             >
               <FileSpreadsheet size={17} />
-              Export XLSX
+              Export
             </button>
           </div>
         </div>

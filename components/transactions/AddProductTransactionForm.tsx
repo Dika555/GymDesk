@@ -5,6 +5,7 @@ import Select from "react-select";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 
 type Product = {
   id: string;
@@ -351,6 +352,21 @@ export default function AddProductTransactionForm({
         );
         return;
       }
+
+      const productSummary = itemsToSave
+        .map((item) => `${item.name} (${item.quantity})`)
+        .join(", ");
+
+      const transactionTotal = itemsToSave.reduce(
+        (sum, item) => sum + item.price * item.quantity,
+        0
+      );
+
+      await logActivity({
+        action: "CREATE",
+        description: `Mencatat transaksi produk untuk ${customerName.trim()}: ${productSummary}, total Rp ${transactionTotal.toLocaleString("id-ID")}`,
+        branchId,
+      });
 
       // Bersihkan form setelah transaksi berhasil.
       setCustomerName("");

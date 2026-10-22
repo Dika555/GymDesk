@@ -6,6 +6,7 @@ import { getActiveBranchId } from "@/lib/branch";
 import AddProductTransactionForm from "@/components/transactions/AddProductTransactionForm";
 import Select from "react-select";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 
 type Member = {
   id: string;
@@ -272,6 +273,29 @@ export default function AddTransactionForm({
           "error",
         );
         return;
+      }
+
+      const memberName =
+        members.find((member) => member.id === memberId)?.name ??
+        customerName.trim() ??
+        "Pelanggan";
+
+      const selectedPlanName =
+        membershipPlans.find((plan) => plan.id === planId)?.name;
+
+      const branchIdForLog = getActiveBranchId();
+
+      if (branchIdForLog) {
+        const description =
+          transactionType === "membership"
+            ? `Mencatat transaksi membership untuk ${memberName} dengan paket ${selectedPlanName ?? "Membership"} sebesar Rp ${Number(totalAmount).toLocaleString("id-ID")}`
+            : `Mencatat transaksi lainnya untuk ${customerName.trim()} sebesar Rp ${Number(totalAmount).toLocaleString("id-ID")}`;
+
+        await logActivity({
+          action: "CREATE",
+          description,
+          branchId: branchIdForLog,
+        });
       }
 
       // Reset formulir setelah berhasil

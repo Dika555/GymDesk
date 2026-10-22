@@ -4,8 +4,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { getActiveBranchId } from "@/lib/branch";
 import ProfileEditModal from "@/components/profile/ProfileEditModal";
-import BranchEditModal from "@/components/profile/BranchEditModal";
 import FeedbackModal from "@/components/ui/FeedbackModal";
+import { logActivity } from "@/lib/activity-log";
 import {
   UserRound,
   Building2,
@@ -52,19 +52,6 @@ export default function ProfilePage() {
 
   const [savingProfile, setSavingProfile] = useState(false);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
-
-  const [isBranchModalOpen, setIsBranchModalOpen] = useState(false);
-
-  const [branchName, setBranchName] = useState("");
-  const [branchAddress, setBranchAddress] = useState("");
-  const [branchPhone, setBranchPhone] = useState("");
-  const [savingBranch, setSavingBranch] = useState(false);
-
-  const [branchInfo, setBranchInfo] = useState<{
-    name: string;
-    address: string | null;
-    phone: string | null;
-  } | null>(null);
 
   const [feedback, setFeedback] =
     useState<FeedbackState>(initialFeedback);
@@ -141,6 +128,24 @@ export default function ProfilePage() {
     const trimmedName = newName.trim();
     const trimmedPhone = newPhone.trim();
 
+    const changes: string[] = [];
+
+    if (profile.name !== trimmedName) {
+      changes.push(
+        `Nama: "${profile.name}" → "${trimmedName}"`
+      );
+    }
+
+    if ((profile.phone ?? "") !== trimmedPhone) {
+      changes.push(
+        `Nomor telepon: "${profile.phone || "-"}" → "${trimmedPhone || "-"}"`
+      );
+    }
+
+    if (file) {
+      changes.push("Foto profil diperbarui");
+    }
+
     if (!trimmedName) {
       showFeedback(
         "Data Belum Lengkap",
@@ -202,6 +207,14 @@ export default function ProfilePage() {
         .eq("id", user.id);
 
       if (userError) throw userError;
+
+      if (changes.length > 0) {
+        await logActivity({
+          action: "UPDATE",
+          description: `Memperbarui profil akun: ${changes.join("; ")}.`,
+          branchId: profile.branch_id,
+        });
+      }
 
       const updatedProfile: UserProfile = {
         ...profile,
@@ -283,123 +296,16 @@ export default function ProfilePage() {
     }
   }, [supabase]);
 
-  const loadBranchInfo = useCallback(async () => {
-    try {
-      const branchId = getActiveBranchId();
-
-      if (!branchId) {
-        setBranchInfo(null);
-        setBranchName("");
-        setBranchAddress("");
-        setBranchPhone("");
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("branches")
-        .select("name, address, phone")
-        .eq("id", branchId)
-        .single();
-
-      if (error) throw error;
-
-      setBranchInfo(data);
-      setBranchName(data.name ?? "");
-      setBranchAddress(data.address ?? "");
-      setBranchPhone(data.phone ?? "");
-    } catch (error) {
-      console.error("Gagal memuat informasi gym:", error);
-      setBranchInfo(null);
-    }
-  }, [supabase]);
-
   useEffect(() => {
     async function loadData() {
       await Promise.all([
         loadProfile(),
-        loadBranchInfo(),
         loadAssignedBranch(),
       ]);
     }
 
     void loadData();
-  }, [loadProfile, loadBranchInfo, loadAssignedBranch]);
-
-  async function handleSaveBranch(
-    newName: string,
-    newPhone: string,
-    newAddress: string
-  ) {
-    const branchId = getActiveBranchId();
-
-    if (!branchId) {
-      showFeedback(
-        "Cabang Tidak Ditemukan",
-        "Cabang aktif tidak ditemukan. Pilih cabang terlebih dahulu.",
-        "warning"
-      );
-      return;
-    }
-
-    const trimmedName = newName.trim();
-
-    if (!trimmedName) {
-      showFeedback(
-        "Nama Gym Belum Diisi",
-        "Nama gym wajib diisi.",
-        "warning"
-      );
-      return;
-    }
-
-    setSavingBranch(true);
-
-    try {
-      const { error: updateError } = await supabase
-        .from("branches")
-        .update({
-          name: trimmedName,
-          address: newAddress.trim(),
-          phone: newPhone.trim(),
-        })
-        .eq("id", branchId);
-
-      if (updateError) throw updateError;
-
-      const { data, error: fetchError } = await supabase
-        .from("branches")
-        .select("name, address, phone")
-        .eq("id", branchId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      setBranchInfo(data);
-      setBranchName(data.name ?? "");
-      setBranchAddress(data.address ?? "");
-      setBranchPhone(data.phone ?? "");
-
-      setIsBranchModalOpen(false);
-
-      showFeedback(
-        "Informasi Gym Berhasil Diperbarui",
-        "Informasi gym pada cabang ini berhasil disimpan.",
-        "success"
-      );
-    } catch (error) {
-      console.error("Gagal menyimpan informasi gym:", error);
-
-      showFeedback(
-        "Gagal Memperbarui Informasi Gym",
-        error instanceof Error
-          ? error.message
-          : "Terjadi kesalahan saat menyimpan informasi gym.",
-        "error"
-      );
-    } finally {
-      setSavingBranch(false);
-    }
-  }
+  }, [loadProfile, loadAssignedBranch]);
 
   return (
     <main className="min-h-screen bg-zinc-50 px-4 py-6 sm:px-6 sm:py-8 md:px-10">
@@ -415,7 +321,7 @@ export default function ProfilePage() {
               Profil
             </h1>
             <p className="mt-1 text-sm leading-5 text-zinc-500">
-              Kelola informasi akun dan informasi GymDesk.
+              Kelola informasi akun
             </p>
           </div>
         </div>
@@ -524,67 +430,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </section>
-
-        {/* Informasi Gym */}
-        <section className="mt-6 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm">
-          <div className="flex flex-col gap-4 border-b border-zinc-100 p-5 sm:flex-row sm:items-center sm:justify-between sm:px-6">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-orange-50 text-orange-600">
-                <Building2 size={21} />
-              </div>
-
-              <div>
-                <h2 className="text-lg font-bold text-zinc-900">
-                  Informasi Gym
-                </h2>
-                <p className="mt-1 text-sm text-zinc-500">
-                  Informasi gym pada cabang yang sedang dikelola.
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setIsBranchModalOpen(true)}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 sm:w-auto"
-            >
-              <Pencil size={16} />
-              Edit Informasi
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 p-5 sm:grid-cols-2 sm:p-6">
-            <div className="rounded-xl border border-zinc-200 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-                <Building2 size={17} className="text-orange-500" />
-                Nama Gym
-              </div>
-              <p className="mt-2 break-words text-base font-semibold text-zinc-900">
-                {branchInfo?.name ?? "-"}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-zinc-200 p-4">
-              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-                <Phone size={17} className="text-orange-500" />
-                Nomor Telepon
-              </div>
-              <p className="mt-2 break-words text-base font-semibold text-zinc-900">
-                {branchInfo?.phone ?? "-"}
-              </p>
-            </div>
-
-            <div className="rounded-xl border border-zinc-200 p-4 sm:col-span-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-zinc-500">
-                <MapPin size={17} className="text-orange-500" />
-                Alamat
-              </div>
-              <p className="mt-2 whitespace-pre-wrap break-words text-base font-semibold leading-6 text-zinc-900">
-                {branchInfo?.address ?? "-"}
-              </p>
-            </div>
-          </div>
-        </section>
       </div>
 
       <ProfileEditModal
@@ -597,16 +442,6 @@ export default function ProfilePage() {
         onClose={() => setIsProfileModalOpen(false)}
         onSave={handleSaveProfile}
         onFeedback={showFeedback}
-      />
-
-      <BranchEditModal
-        open={isBranchModalOpen}
-        name={branchName}
-        phone={branchPhone}
-        address={branchAddress}
-        saving={savingBranch}
-        onClose={() => setIsBranchModalOpen(false)}
-        onSave={handleSaveBranch}
       />
 
       <FeedbackModal

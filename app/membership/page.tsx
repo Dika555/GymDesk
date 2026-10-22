@@ -9,6 +9,7 @@ import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
 import { useSearchParams } from "next/navigation";
+import { logActivity } from "@/lib/activity-log";
 
 import {
   Dumbbell,
@@ -214,6 +215,12 @@ function MembershipContent() {
         );
         return;
       }
+
+      await logActivity({
+        action: "CREATE",
+        description: `Menambahkan paket membership: ${name.trim()}`,
+        branchId,
+      });
 
       // Kosongkan form
       setName("");

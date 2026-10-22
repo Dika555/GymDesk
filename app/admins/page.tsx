@@ -7,6 +7,7 @@ import Search from "@/components/ui/Search";
 import Pagination from "@/components/ui/Pagination";
 import FeedbackModal from "@/components/ui/FeedbackModal";
 import Modal from "@/components/ui/Modal";
+import { logActivity } from "@/lib/activity-log";
 import {
   ShieldCheck,
   Pencil,
@@ -236,6 +237,21 @@ export default function AdminsPage() {
 
     try {
       if (editingAdmin) {
+
+        const changes: string[] = [];
+
+        if (editingAdmin.name !== trimmedName) {
+          changes.push(
+            `Nama: "${editingAdmin.name}" → "${trimmedName}"`
+          );
+        }
+
+        if (editingAdmin.branch_id !== branchId) {
+          changes.push(
+            `Cabang: "${getBranchName(editingAdmin.branch_id)}" → "${getBranchName(branchId)}"`
+          );
+        }
+
         // Edit admin: email tidak ikut diperbarui.
         const { error } = await supabase
           .from("users")
@@ -255,6 +271,14 @@ export default function AdminsPage() {
             "error"
           );
           return;
+        }
+
+        if (changes.length > 0) {
+          await logActivity({
+            action: "UPDATE",
+            description: `Memperbarui admin "${trimmedName}": ${changes.join("; ")}`,
+            branchId,
+          });
         }
 
         closeFormAfterSave();
@@ -289,6 +313,23 @@ export default function AdminsPage() {
           );
           return;
         }
+
+        const { data: currentUserData } = await supabase.auth.getUser();
+
+        const { data: currentProfile } = await supabase
+          .from("users")
+          .select("branch_id, role")
+          .eq("id", currentUserData.user?.id)
+          .single();
+
+        await logActivity({
+          action: "CREATE",
+          description: `Menambahkan akun admin "${trimmedName}" untuk cabang ${getBranchName(branchId)}.`,
+          branchId:
+            currentProfile?.role === "super_admin"
+              ? branchId
+              : currentProfile?.branch_id,
+        });
 
         closeFormAfterSave();
 
@@ -356,6 +397,13 @@ export default function AdminsPage() {
         );
         return;
       }
+
+      await logActivity({
+        action: newStatus ? "ACTIVATE" : "DEACTIVATE",
+        description: `Admin "${admin.name}" berhasil ${newStatus ? "diaktifkan" : "dinonaktifkan"
+          }.`,
+        branchId: admin.branch_id,
+      });
 
       setConfirmAdmin(null);
 
