@@ -253,14 +253,11 @@ export default function AdminsPage() {
         }
 
         // Edit admin: email tidak ikut diperbarui.
-        const { error } = await supabase
-          .from("users")
-          .update({
-            name: trimmedName,
-            branch_id: branchId,
-          })
-          .eq("id", editingAdmin.id)
-          .eq("role", "admin");
+        const { error } = await supabase.rpc("update_admin_details", {
+          p_user_id: editingAdmin.id,
+          p_name: trimmedName,
+          p_branch_id: branchId,
+        });
 
         if (error) {
           console.error("Gagal memperbarui admin:", error);
